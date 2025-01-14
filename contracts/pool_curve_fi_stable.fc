@@ -1,0 +1,3 @@
+#include "pool/amm/curve_fi_stable.fc";
+#include "pool/include/jetton_based.fc";
+#include "pool/include/recv_internal.fc";

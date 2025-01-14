@@ -1,0 +1,296 @@
+#include "stdlib.fc";
+#include "math.fc";
+#include "constants.fc";
+#include "messages.fc";
+
+
+const int contract_type::vault = 0;
+const int contract_type::pool = 1;
+const int contract_type::liquidity_depository = 2;
+const int contract_type::pool_creator = 3;
+
+const int direction::forward = 0; ;; asset1 -> asset2
+const int direction::backward = 1; ;; asset2 -> asset1
+
+const int amm::constant_product = 0;
+const int amm::curve_fi_stable = 1;
+
+const int asset::native = 0;
+const int asset::jetton = 1;
+const int asset::extra = 2;
+
+const int deposit_liquidity_condition::none = 0;
+const int deposit_liquidity_condition::lp_quantity = 1;
+const int deposit_liquidity_condition::reserves_ratio = 2;
+const int deposit_liquidity_condition::complex = 3;
+
+() force_chain(slice addr) impure inline {
+    (int wc, _) = parse_std_addr(addr);
+    throw_unless(errors::wrong_chain, wc == BASECHAIN);
+}
+
+(slice, slice) load_asset(slice cs) inline {
+    int asset_type = cs.preload_uint(2);
+    int bits = 0;
+    if (asset_type == asset::native) {
+        ;; nothing
+    } elseif (asset_type == asset::jetton) {
+        bits = 8 + 256;
+        ;; ok:
+        ;;      addr_std$10 anycast:(Maybe Anycast)
+        ;;      workchain_id:int8 address:bits256  = MsgAddressInt;
+    } elseif (asset_type == asset::extra) {
+        bits = 32;
+    } else {
+        throw(errors::invalid_asset_type);
+    }
+    slice result = cs~load_bits(2 + bits);
+    return (cs, result);
+}
+
+slice asset_native() asm "<b 0 2 u, b> <s PUSHSLICE"; ;; 2 bit with zeroes
+
+slice asset_jetton_to_address(slice asset) inline {
+    slice copy = asset.preload_bits(2 + 8 + 256);
+    throw_unless(errors::invalid_asset_type, copy~load_uint(2) == asset::jetton);
+    return construct_address(copy~load_uint(8), copy~load_uint(256));
+}
+
+int asset_extra_to_id(slice asset) inline {
+    slice copy = asset.preload_bits(2 + 32);
+    throw_unless(errors::invalid_asset_type, copy~load_uint(2) == asset::extra);
+    return copy~load_uint(32);
+}
+
+(slice, slice, int) sort_assets(slice asset1, slice asset2) inline {
+    int t1 = asset1.preload_uint(2);
+    int t2 = asset2.preload_uint(2);
+    if (t1 == t2) {
+        if (t1 == asset::jetton) {
+            slice s1 = asset1.preload_bits_offset(2, 8 + 256);
+            slice s2 = asset2.preload_bits_offset(2, 8 + 256);
+            t1 = s1~load_uint(8);
+            t2 = s2~load_uint(8);
+            if (t1 == t2) {
+                t1 = s1~load_uint(256);
+                t2 = s2~load_uint(256);
+            }
+        } elseif (t1 == asset::extra) {
+            t1 = asset1.preload_uint(2 + 32);
+            t2 = asset2.preload_uint(2 + 32);
+        } else {
+            throw(errors::unexpected);
+        }
+    }
+    if (t1 <= t2) {
+        return (asset1, asset2, false);
+    }
+    return (asset2, asset1, true);
+}
+
+(slice, slice) parse_vault_init_data(cell init_data_cell) inline {
+    slice cs = init_data_cell.begin_parse();
+    slice factory_address = cs~load_msg_addr();
+    cs~skip_bits(2);
+    slice asset = cs~load_asset();
+    return (factory_address, asset);
+}
+
+(slice, slice, slice, int) parse_pool_init_data(cell init_data_cell) inline {
+    slice cs = init_data_cell.begin_parse();
+    slice factory_address = cs~load_msg_addr();
+    cs~skip_bits(2);
+    slice asset1 = cs~load_asset();
+    slice asset2 = cs~load_asset();
+    int amm = cs~load_uint(3);
+    return (factory_address, asset1, asset2, amm);
+}
+
+cell gen_owned_double_asset_init_data(slice factory_address, int contract_type, slice owner, slice asset1, slice asset2, int amm) inline {
+    (asset1, asset2, _) = sort_assets(asset1, asset2);
+    return begin_cell()
+        .store_slice(factory_address)
+        .store_uint(contract_type, 2)
+        .store_slice(owner)
+        .store_ref(
+            begin_cell()
+                .store_slice(asset1)
+                .store_slice(asset2)
+                .store_uint(amm, 3)
+                .end_cell()
+        )
+        .end_cell();
+}
+
+(slice, slice, slice, slice, int) parse_owned_double_asset_init_data(cell init_data_cell) inline {
+    slice cs = init_data_cell.begin_parse();
+    slice factory_address = cs~load_msg_addr();
+    cs~skip_bits(2);
+    slice owner = cs~load_msg_addr();
+    cs = cs~load_ref().begin_parse();
+    slice asset1 = cs~load_asset();
+    slice asset2 = cs~load_asset();
+    int amm = cs~load_uint(3);
+    return (factory_address, owner, asset1, asset2, amm);
+}
+
+cell gen_vault_init_data(slice factory_address, slice asset) inline {
+    return begin_cell()
+        .store_slice(factory_address)
+        .store_uint(contract_type::vault, 2)
+        .store_slice(asset)
+        .end_cell();
+}
+
+cell gen_pool_init_data(slice factory_address, slice asset1, slice asset2, int amm) inline {
+    (asset1, asset2, _) = sort_assets(asset1, asset2);
+    return begin_cell()
+        .store_slice(factory_address)
+        .store_uint(contract_type::pool, 2)
+        .store_slice(asset1)
+        .store_slice(asset2)
+        .store_uint(amm, 3)
+        .end_cell();
+}
+
+cell gen_liquidity_depository_init_data(slice factory_address, slice owner, slice asset1, slice asset2, int amm) inline {
+    return gen_owned_double_asset_init_data(factory_address, contract_type::liquidity_depository, owner, asset1, asset2, amm);
+}
+
+cell gen_pool_creator_init_data(slice factory_address, slice owner, slice asset1, slice asset2, int amm) inline {
+    return gen_owned_double_asset_init_data(factory_address, contract_type::pool_creator, owner, asset1, asset2, amm);
+}
+
+cell gen_contract_state_init(cell init_code_cell, cell init_data_cell) inline {
+    return begin_cell()
+        .store_uint(6, 5) ;; 001100 -- depth,special,code,data,library
+        .store_ref(init_code_cell)
+        .store_ref(init_data_cell)
+        .end_cell();
+}
+
+slice verify_proof(slice factory_address, cell init_code_cell, slice sender_address, cell proof, int allow_factory) impure inline {
+    if (cell_null?(proof)) {
+        throw_unless(errors::wrong_signature, allow_factory & equal_slice_bits(sender_address, factory_address));
+        return null();
+    } else {
+        slice proof_slice = proof.begin_parse();
+        slice proof_factory_address = proof_slice~load_msg_addr();
+        int hash = calculate_account_hash_cheap_from_cells(init_code_cell, proof);
+        (int wc, int sender_hash) = parse_std_addr(sender_address);
+        throw_unless(errors::wrong_signature, (equal_slice_bits(proof_factory_address, factory_address)) & (wc == BASECHAIN) & (hash == sender_hash));
+        return proof_slice;
+    }
+}
+
+int gen_lp_wallet_state_init_hash(slice owner_address, slice master_address, cell wallet_code) inline {
+    return calculate_account_hash_cheap_from_cells(
+        wallet_code,
+        begin_cell()
+            .store_coins(0)
+            .store_slice(owner_address)
+            .store_slice(master_address)
+            .store_ref(wallet_code)
+            .end_cell()
+    );
+}
+
+cell gen_lp_wallet_state_init(slice owner_address, slice master_address, cell wallet_code) inline {
+    return begin_cell()
+        .store_uint(0, 2)
+        .store_dict(wallet_code)
+        .store_dict(
+            begin_cell()
+                .store_coins(0)
+                .store_slice(owner_address)
+                .store_slice(master_address)
+                .store_ref(wallet_code)
+                .end_cell()
+        )
+        .store_uint(0, 1)
+        .end_cell();
+}
+
+() verify_lp_wallet(slice from_address, slice sender_address, cell wallet_code) impure inline {
+    int expected_hash = gen_lp_wallet_state_init_hash(from_address, my_address(), wallet_code);
+    (int wc, int hash) = parse_std_addr(sender_address);
+    throw_unless(errors::wrong_sender, (wc == BASECHAIN) & (hash == expected_hash));
+}
+
+int calculate_vault_address_hash(slice factory_address, cell init_code_cell, slice asset) inline {
+    cell init_data_cell = gen_vault_init_data(factory_address, asset);
+    return calculate_account_hash_cheap(
+        cell_hash(init_code_cell),
+        cell_depth(init_code_cell),
+        cell_hash(init_data_cell),
+        0
+    );
+}
+
+int calculate_pool_address_hash(slice factory_address, cell init_code_cell, slice asset1, slice asset2, int amm) inline {
+    (asset1, asset2, _) = sort_assets(asset1, asset2);
+    cell init_data_cell = begin_cell()
+        .store_slice(factory_address)
+        .store_uint(contract_type::pool, 2)
+        .store_slice(asset1)
+        .store_slice(asset2)
+        .store_uint(amm, 3)
+        .end_cell();
+    return calculate_account_hash_cheap(
+        cell_hash(init_code_cell),
+        cell_depth(init_code_cell),
+        cell_hash(init_data_cell),
+        0
+    );
+}
+
+(slice, (slice, slice, int)) parse_pool_params(slice cs) inline {
+    slice asset1 = cs~load_asset();
+    slice asset2 = cs~load_asset();
+    int amm = cs~load_uint(3);
+    return (cs, (asset1, asset2, amm));
+}
+
+builder build_payout_internal_body(int query_id, slice recipient, int amount, cell notification, cell proof) inline {
+    return begin_cell()
+        .store_uint(opcodes::payout_internal, 32)
+        .store_uint(query_id, 64)
+        .store_slice(recipient)
+        .store_coins(amount)
+        .store_maybe_ref(notification)
+        .store_maybe_ref(proof);
+}
+
+() update_contract(int query_id, slice excesses_receiver, slice in_msg_body) impure inline {
+    cell code = in_msg_body~load_maybe_ref();
+    cell data = in_msg_body~load_maybe_ref();
+    ifnot (cell_null?(code)) {
+        set_code(code);
+    }
+    ifnot (cell_null?(data)) {
+        set_data(data);
+    }
+    send_small_builder_carry_inbound(
+        excesses_receiver,
+        0,
+        begin_cell()
+            .store_uint(opcodes::excesses, 32)
+            .store_uint(query_id, 64)
+    );
+}
+
+slice address_to_hex_string(int value) {
+    tuple t = empty_tuple();
+    repeat (64) {
+        int current = value & 15;
+        current = (current > 9) ? (current + 55) : (current + 48);
+        t = cons(current, t);
+        value >>= 4;
+    }
+    builder b = begin_cell();
+    repeat (64) {
+        (int current, t) = uncons(t);
+        b = b.store_uint(current, 8);
+    }
+    return b.end_cell().begin_parse().preload_bits(512);
+}

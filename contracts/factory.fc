@@ -1,0 +1,423 @@
+#include "include/commons.fc";
+#include "include/constants.fc";
+#include "include/messages.fc";
+#include "include/gas.fc";
+#include "include/stdlib.fc";
+
+global slice storage::admin_address;
+global slice storage::withdrawer_address;
+
+global cell storage::lp_wallet_code_cell;
+global cell storage::init_code_cell;
+global cell storage::vault_code_dict;
+global cell storage::pool_code_dict;
+global cell storage::liquidity_depository_code_cell;
+global cell storage::pool_creator_code_cell;
+
+() load_data() impure inline {
+    slice cs = get_data().begin_parse();
+    storage::admin_address = cs~load_msg_addr();
+    storage::withdrawer_address = cs~load_msg_addr();
+
+    slice code_cs = cs~load_ref().begin_parse();
+    storage::lp_wallet_code_cell = code_cs~load_ref();
+    storage::init_code_cell = code_cs~load_ref();
+    storage::liquidity_depository_code_cell = code_cs~load_ref();
+    storage::pool_creator_code_cell = code_cs~load_ref();
+
+    code_cs = cs~load_ref().begin_parse();
+    storage::vault_code_dict = code_cs~load_dict();
+    storage::pool_code_dict = code_cs~load_dict();
+}
+
+() update_addresses(slice admin_address, slice withdrawer_address) impure inline {
+    set_data(
+        begin_cell()
+            .store_slice(admin_address)
+            .store_slice(withdrawer_address)
+            .store_ref(
+                begin_cell()
+                    .store_ref(storage::lp_wallet_code_cell)
+                    .store_ref(storage::init_code_cell)
+                    .store_ref(storage::liquidity_depository_code_cell)
+                    .store_ref(storage::pool_creator_code_cell)
+                    .end_cell()
+            )
+            .store_ref(
+                begin_cell()
+                    .store_dict(storage::vault_code_dict)
+                    .store_dict(storage::pool_code_dict)
+                    .end_cell()
+            )
+            .end_cell()
+    );
+}
+
+() update_code_cell(cell code_cell) impure inline {
+    set_data(
+        begin_cell()
+            .store_slice(storage::admin_address)
+            .store_slice(storage::withdrawer_address)
+            .store_ref(code_cell)
+            .end_cell()
+    );
+}
+
+() recv_internal(cell in_msg_full, slice in_msg_body) impure {
+    slice cs = in_msg_full.begin_parse();
+
+    int flags = cs~load_msg_flags(); ;; 4 bit, see block.tlb -> CommonMsgInfo
+    if (flags & 1) {
+        ;; ignore bounced
+        return ();
+    };; <=> check 0xffffffff
+
+    load_data();
+
+    slice sender_address = cs~load_msg_addr();
+    force_chain(sender_address);
+    (int opcode, int query_id) = (in_msg_body~load_uint(32), in_msg_body~load_uint(64));
+    if (opcode == opcodes::create_pool_creator_request) {
+        int amount = in_msg_body~load_coins();
+
+        cell pool_creator_params = in_msg_body~load_ref();
+        slice pool_creator_params_cs = pool_creator_params.begin_parse();
+        (slice asset1, slice asset2, int amm) = pool_creator_params_cs~parse_pool_params();
+        cell extra_settings = pool_creator_params_cs~load_maybe_ref();
+        cell notification_data = pool_creator_params_cs~load_maybe_ref();
+
+        cell amm_settings = in_msg_body~load_maybe_ref();
+        slice recipient = in_msg_body~load_msg_addr();
+        throw_unless(errors::not_an_admin, (amm == amm::constant_product) | equal_slice_bits(recipient, storage::admin_address)); ;; only admin can create non-constant product pools
+        cell proof = in_msg_body~load_ref();
+
+        slice proof_cs = verify_proof(my_address(), storage::init_code_cell, sender_address, proof, false);
+
+        throw_unless(errors::wrong_sender, proof_cs~load_uint(2) == contract_type::vault);
+        slice asset = proof_cs~load_asset();
+
+        cell init_data = gen_pool_creator_init_data(my_address(), recipient, asset1, asset2, amm);
+        cell state_init = gen_contract_state_init(storage::init_code_cell, init_data);
+        int destination_hash = cell_hash(state_init);
+
+        send_hash_small_builder_init_carry_inbound(
+            destination_hash,
+            begin_cell()
+                .store_uint(opcodes::deploy, 32)
+                .store_uint(query_id, 64)
+                .store_ref(storage::pool_creator_code_cell)
+                .store_ref(
+                    begin_cell()
+                        .store_ref(storage::init_code_cell)
+                        .store_ref(init_data)
+                        .store_coins(0)
+                        .store_coins(0)
+                        .end_cell()
+                )
+                .store_maybe_ref(
+                    begin_cell()
+                        .store_uint(opcodes::create_pool_creator_internal, 32)
+                        .store_uint(query_id, 64)
+                        .store_slice(asset)
+                        .store_uint(amm, 3)
+                        .store_maybe_ref(amm_settings)
+                        .store_coins(amount)
+                        .store_slice(recipient)
+                        .store_maybe_ref(extra_settings)
+                        .store_maybe_ref(notification_data)
+                        .end_cell()
+                ),
+            state_init
+        );
+    } elseif (opcode == opcodes::create_liquidity_depository_request) {
+        int amount = in_msg_body~load_coins();
+        cell params = in_msg_body~load_ref();
+        cell pool_params = in_msg_body~load_ref();
+        (_, (slice asset1, slice asset2, int amm)) = parse_pool_params(pool_params.begin_parse());
+        cell proof = in_msg_body~load_ref();
+
+        slice proof_cs = verify_proof(my_address(), storage::init_code_cell, sender_address, proof, false);
+
+        throw_unless(errors::wrong_sender, proof_cs~load_uint(2) == contract_type::vault);
+        slice asset = proof_cs~load_asset();
+
+        (_, slice recipient) = load_msg_addr(params.begin_parse());
+
+        cell init_data = gen_liquidity_depository_init_data(my_address(), recipient, asset1, asset2, amm);
+        cell state_init = gen_contract_state_init(storage::init_code_cell, init_data);
+        int destination_hash = cell_hash(state_init);
+
+        send_hash_small_builder_init_carry_inbound(
+            destination_hash,
+            begin_cell()
+                .store_uint(opcodes::deploy, 32)
+                .store_uint(query_id, 64)
+                .store_ref(storage::liquidity_depository_code_cell)
+                .store_ref(
+                    begin_cell()
+                        .store_ref(storage::init_code_cell)
+                        .store_ref(init_data)
+                        .store_coins(0)
+                        .store_coins(0)
+                        .end_cell()
+                )
+                .store_maybe_ref(
+                    begin_cell()
+                        .store_uint(opcodes::create_liquidity_depository_internal, 32)
+                        .store_uint(query_id, 64)
+                        .store_slice(asset)
+                        .store_uint(amm, 3)
+                        .store_coins(amount)
+                        .store_ref(params)
+                        .end_cell()
+                ),
+            state_init
+        );
+    } elseif (opcode == opcodes::create_pool_request) {
+        int amount1 = in_msg_body~load_coins();
+        int amount2 = in_msg_body~load_coins();
+        slice recipient = in_msg_body~load_msg_addr();
+        cell amm_settings = in_msg_body~load_maybe_ref();
+        cell extra_settings = in_msg_body~load_maybe_ref();
+        cell notification_data = in_msg_body~load_maybe_ref();
+        cell proof = in_msg_body~load_ref();
+
+        slice proof_cs = verify_proof(my_address(), storage::init_code_cell, sender_address, proof, false);
+
+        throw_unless(errors::wrong_sender, proof_cs~load_uint(2) == contract_type::pool_creator);
+        proof_cs = proof_cs~load_ref().begin_parse();
+        (slice asset1, slice asset2, int amm) = proof_cs~parse_pool_params();
+
+        cell init_data = gen_pool_init_data(my_address(), asset1, asset2, amm);
+        cell state_init = gen_contract_state_init(storage::init_code_cell, init_data);
+        int destination_hash = cell_hash(state_init);
+        send_hash_small_builder_init_carry_inbound(
+            destination_hash,
+            begin_cell()
+                .store_uint(opcodes::deploy, 32)
+                .store_uint(query_id, 64)
+                .store_ref(storage::pool_code_dict.udict_get_ref(3, amm))
+                .store_ref(
+                    begin_cell()
+                        .store_ref(storage::init_code_cell)
+                        .store_ref(init_data)
+                        .store_maybe_ref(amm_settings)
+                        .store_bool(true)
+                        .store_coins(0) ;; reserve1
+                        .store_coins(0) ;; reserve2
+                        .store_coins(0) ;; total supply
+                        .store_uint(200, 16) ;; 0.02% fee for protocol
+                        .store_uint(800, 16) ;; 0.08% fee for lp
+                        .store_ref(storage::lp_wallet_code_cell)
+                        .end_cell()
+                )
+                .store_maybe_ref(
+                    begin_cell()
+                        .store_uint(opcodes::create_pool_internal, 32)
+                        .store_uint(query_id, 64)
+                        .store_coins(amount1)
+                        .store_coins(amount2)
+                        .store_slice(recipient)
+                        .store_maybe_ref(extra_settings)
+                        .store_maybe_ref(notification_data)
+                        .end_cell()
+                ),
+            state_init
+        );
+    } elseif (opcode == opcodes::create_vault) {
+        ;; ok
+        cs~load_msg_addr(); ;; skip dst
+        int msg_value = cs~load_coins();
+        int ton_required_for_gas = max(gas::create_vault::min, get_compute_fee(BASECHAIN, gas::create_vault::computation));
+        throw_unless(errors::not_enough_gas, msg_value >= ton_required_for_gas);
+        slice asset = in_msg_body~load_asset();
+        cell init_data = gen_vault_init_data(my_address(), asset);
+        cell state_init = gen_contract_state_init(storage::init_code_cell, init_data);
+        int destination_hash = cell_hash(state_init);
+        int asset_type = asset.preload_uint(2);
+        cell code = storage::vault_code_dict.udict_get_ref(2, asset_type);
+        cell action = null();
+        if (asset_type == asset::jetton) {
+            action = begin_cell()
+                .store_uint(opcodes::create_vault_internal, 32) ;; ok
+                .store_uint(query_id, 64)
+                .end_cell();
+        } elseif (asset_type == asset::extra) {
+            ;; nothing
+        } elseif (asset_type != asset::native) {
+            throw(errors::invalid_asset_type);
+        }
+        send_hash_small_builder_init_carry_inbound(
+            destination_hash,
+            begin_cell()
+                .store_uint(opcodes::deploy, 32)
+                .store_uint(query_id, 64)
+                .store_ref(code)
+                .store_ref(
+                    begin_cell()
+                        .store_ref(storage::init_code_cell)
+                        .store_ref(init_data)
+                        .store_uint(0, 1)
+                        .end_cell()
+                )
+                .store_maybe_ref(action),
+            state_init
+        );
+    } elseif (opcode == opcodes::update_admin) {
+        ;; ok
+        throw_unless(errors::not_an_admin, equal_slice_bits(storage::admin_address, sender_address));
+        update_addresses(in_msg_body~load_msg_addr(), storage::withdrawer_address);
+        send_small_builder_carry_inbound(
+            sender_address,
+            0,
+            begin_cell()
+                .store_uint(opcodes::excesses, 32)
+                .store_uint(query_id, 64)
+        );
+    } elseif (opcode == opcodes::update_withdrawer) {
+        ;; ok
+        throw_unless(errors::not_an_admin, equal_slice_bits(storage::admin_address, sender_address));
+        update_addresses(storage::admin_address, in_msg_body~load_msg_addr());
+        send_small_builder_carry_inbound(
+            sender_address,
+            0,
+            begin_cell()
+                .store_uint(opcodes::excesses, 32)
+                .store_uint(query_id, 64)
+        );
+    } elseif (opcode == opcodes::update_code_cell) {
+        throw_unless(errors::not_an_admin, equal_slice_bits(storage::admin_address, sender_address));
+        update_code_cell(in_msg_body~load_ref());
+        send_small_builder_carry_inbound(
+            sender_address,
+            0,
+            begin_cell()
+                .store_uint(opcodes::excesses, 32)
+                .store_uint(query_id, 64)
+        );
+    } elseif (opcode == opcodes::update_contract) {
+        throw_unless(errors::not_an_admin, equal_slice_bits(storage::admin_address, sender_address));
+        slice destination = in_msg_body~load_msg_addr();
+        if (is_address_none(destination)) {
+            update_contract(query_id, sender_address, in_msg_body);
+        } else {
+            cell code = in_msg_body~load_maybe_ref();
+            cell data = in_msg_body~load_maybe_ref();
+            send_small_builder_carry_inbound(
+                destination,
+                0,
+                begin_cell()
+                    .store_uint(opcodes::update_contract_internal, 32)
+                    .store_uint(query_id, 64)
+                    .store_slice(sender_address)
+                    .store_maybe_ref(code)
+                    .store_maybe_ref(data)
+            );
+        }
+    } elseif (opcode == opcodes::update_pool) {
+        throw_unless(errors::not_an_admin, equal_slice_bits(storage::admin_address, sender_address));
+        (slice asset1, slice asset2, int amm) = in_msg_body~parse_pool_params();
+        cell params = in_msg_body~load_ref();
+        int pool_address_hash = calculate_pool_address_hash(
+            my_address(),
+            storage::init_code_cell,
+            asset1,
+            asset2,
+            amm
+        );
+        send_hash_small_builder_carry_inbound(
+            pool_address_hash,
+            0,
+            begin_cell()
+                .store_uint(opcodes::update_pool_internal, 32)
+                .store_uint(query_id, 64)
+                .store_slice(sender_address)
+                .store_ref(params)
+        );
+    } elseif (opcode == opcodes::activate_vault) {
+        ;; ok
+        throw_unless(errors::not_an_admin, equal_slice_bits(storage::admin_address, sender_address));
+        slice asset = in_msg_body~load_asset();
+        slice wallet = in_msg_body~load_msg_addr();
+        throw_if(errors::unexpected, (asset.preload_uint(2) != asset::jetton) | is_address_none(wallet));
+
+        send_hash_small_builder_carry_inbound(
+            calculate_vault_address_hash(
+                my_address(),
+                storage::init_code_cell,
+                asset
+            ),
+            0,
+            begin_cell()
+                .store_uint(opcodes::activate_vault_internal, 32)
+                .store_uint(query_id, 64)
+                .store_slice(wallet)
+        );
+    } elseif (opcode == opcodes::withdraw) {
+        ;; ok
+        throw_unless(errors::wrong_sender, equal_slice_bits(storage::withdrawer_address, sender_address));
+        slice asset = in_msg_body~load_asset();
+        int amount = in_msg_body~load_coins();
+        slice receiver = in_msg_body~load_msg_addr();
+
+        send_hash_small_builder_carry_inbound(
+            calculate_vault_address_hash(
+                my_address(),
+                storage::init_code_cell,
+                asset
+            ),
+            0,
+            begin_cell()
+                .store_uint(opcodes::payout_internal, 32)
+                .store_uint(query_id, 64)
+                .store_slice(receiver)
+                .store_coins(amount)
+                .store_uint(0, 2)
+        );
+    } else {
+        throw(errors::unknown_opcode);
+    }
+    return ();
+}
+
+(slice, int) get_vault_address(slice asset) method_id {
+    load_data();
+    int hash = calculate_vault_address_hash(my_address(), storage::init_code_cell, asset);
+    return (construct_address(BASECHAIN, hash), hash);
+}
+
+(slice, int) get_pool_address(slice asset1, slice asset2, int amm) method_id {
+    throw_if(errors::same_assets, equal_slice_bits(asset1, asset2));
+    load_data();
+    int hash = calculate_pool_address_hash(my_address(), storage::init_code_cell, asset1, asset2, amm);
+    return (construct_address(BASECHAIN, hash), hash);
+}
+
+(slice, int) get_pool_creator_address(slice owner, slice asset1, slice asset2, int amm) method_id {
+    load_data();
+    int hash = calculate_account_hash_cheap_from_cells(
+        storage::init_code_cell,
+        gen_pool_creator_init_data(my_address(), owner, asset1, asset2, amm)
+    );
+    return (construct_address(BASECHAIN, hash), hash);
+}
+
+(slice, int) get_liquidity_depository_address(slice owner, slice asset1, slice asset2, int amm) method_id {
+    load_data();
+    int hash = calculate_account_hash_cheap_from_cells(
+        storage::init_code_cell,
+        gen_liquidity_depository_init_data(my_address(), owner, asset1, asset2, amm)
+    );
+    return (construct_address(BASECHAIN, hash), hash);
+}
+
+slice get_admin_address() method_id {
+    load_data();
+    return storage::admin_address;
+}
+
+cell get_code() method_id {
+    slice cs = get_data().begin_parse();
+    cs~load_msg_addr();
+    return cs~load_ref();
+}

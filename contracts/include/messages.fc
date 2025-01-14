@@ -1,0 +1,290 @@
+#include "gas.fc";
+#include "math.fc";
+#include "stdlib.fc";
+
+const int opcodes::transfer = 0xf8a7ea5;
+const int opcodes::transfer_notification = 0x7362d09c;
+const int opcodes::burn_notification = 0x7bdd97de;
+const int opcodes::internal_transfer = 0x178d4519;
+const int opcodes::excesses = 0xd53276db;
+const int opcodes::provide_wallet_address = 0x2c76b973;
+const int opcodes::take_wallet_address = 0xd1735400;
+
+{-
+message$_ {X:Type} info:CommonMsgInfo
+  init:(Maybe (Either StateInit ^StateInit))
+  body:(Either X ^X) = Message X;
+
+int_msg_info$0 ihr_disabled:Bool bounce:Bool bounced:Bool
+  src:MsgAddressInt dest:MsgAddressInt
+  value:CurrencyCollection ihr_fee:Grams fwd_fee:Grams
+  created_lt:uint64 created_at:uint32 = CommonMsgInfo;
+
+ext_out_msg_info$11 src:MsgAddressInt dest:MsgAddressExt
+  created_lt:uint64 created_at:uint32 = CommonMsgInfo;
+
+addr_none$00 = MsgAddressExt;
+addr_std$10 anycast:(Maybe Anycast) workchain_id:int8 address:bits256  = MsgAddressInt;
+addr_extern$01 len:(## 9) external_address:(bits len) = MsgAddressExt;
+
+nanograms$_ amount:(VarUInteger 16) = Grams;
+currencies$_ grams:Grams other:ExtraCurrencyCollection = CurrencyCollection;
+
+nothing$0 {X:Type} = Maybe X;
+just$1 {X:Type} value:X = Maybe X;
+left$0 {X:Type} {Y:Type} value:X = Either X Y;
+right$1 {X:Type} {Y:Type} value:Y = Either X Y;
+
+max coins = 1329227995784915872903807060280344575
+-}
+
+() send_cell(slice destination, int value, cell body) impure inline {
+    send_raw_message(
+        begin_cell()
+            .store_uint(NON_BOUNCEABLE, 6)
+            .store_slice(destination)
+            .store_coins(value)
+            .store_uint(1, 107)
+            .store_ref(body)
+            .end_cell(),
+        SEND_MODE_REGULAR
+    );
+}
+
+() send_builder(slice destination, int value, builder body, int mode) impure inline {
+    builder msg = begin_cell()
+        .store_uint(NON_BOUNCEABLE, 6)
+        .store_slice(destination)
+        .store_coins(value);
+    if (msg.builder_bits() + body.builder_bits() > 916) {
+        msg = msg.store_uint(1, 107).store_ref(body.end_cell());
+    } else {
+        msg = msg.store_uint(0, 107).store_builder(body);
+    }
+    send_raw_message(msg.end_cell(), mode);
+}
+
+int send_hash_builder(int destination_hash, int value, builder body, int mode) impure inline {
+    builder msg = begin_cell()
+        .store_uint(33792, 17) ;; NON_BOUNCEABLE, BASECHAIN
+        .store_uint(destination_hash, 256)
+        .store_coins(value);
+    if (msg.builder_bits() + body.builder_bits() > 916) {
+        msg = msg.store_uint(1, 107).store_ref(body.end_cell());
+    } else {
+        msg = msg.store_uint(0, 107).store_builder(body);
+    }
+    return send_message(msg.end_cell(), mode);
+}
+
+;; small = at most 519 bits
+() send_hash_small_builder(int destination_hash, int value, builder body) impure inline {
+    cell msg = begin_cell()
+        .store_uint(33792, 17) ;; NON_BOUNCEABLE, BASECHAIN
+        .store_uint(destination_hash, 256)
+        .store_coins(value)
+        .store_uint(0, 107)
+        .store_builder(body)
+        .end_cell();
+    send_raw_message(msg, SEND_MODE_REGULAR);
+}
+
+() send_small_builder_extra(slice destination, int value, cell extra, builder body, int mode) impure inline {
+    cell msg = begin_cell()
+        .store_uint(NON_BOUNCEABLE, 6)
+        .store_slice(destination)
+        .store_coins(value)
+        .store_dict(extra)
+        .store_uint(0, 106)
+        .store_builder(body)
+        .end_cell();
+    send_raw_message(msg, mode);
+}
+
+() send_cell_carry_inbound(slice destination, int value, cell body) impure inline {
+    value += get_incoming_value() - get_storage_fees();
+    ;; 862 for execution before send_raw_message
+    ;; 651 = 526 for send_raw_message + 125 for new action installation
+    ;; up to 50 for implicit return invocations
+    value -= get_compute_fee(BASECHAIN, 862 + 651 + 50 + gas_consumed());
+    cell msg = begin_cell()
+        .store_uint(NON_BOUNCEABLE, 6)
+        .store_slice(destination)
+        .store_coins(value)
+        .store_uint(1, 107)
+        .store_ref(body)
+        .end_cell();
+    send_raw_message(msg, SEND_MODE_REGULAR);
+}
+
+;; small = at most 519 bits
+() send_small_builder_carry_inbound(slice destination, int value, builder body) impure inline {
+    value += get_incoming_value() - get_storage_fees();
+    value -= get_compute_fee(BASECHAIN, 888 + 651 + 50 + gas_consumed());
+    cell msg = begin_cell()
+        .store_uint(NON_BOUNCEABLE, 6)
+        .store_slice(destination)
+        .store_coins(value)
+        .store_uint(0, 107)
+        .store_builder(body)
+        .end_cell();
+    send_raw_message(msg, SEND_MODE_REGULAR);
+}
+
+;; small = at most 519 bits
+() send_hash_small_builder_carry_inbound(int destination_hash, int value, builder body) impure inline {
+    value += get_incoming_value() - get_storage_fees();
+    value -= get_compute_fee(BASECHAIN, 877 + 651 + 50 + gas_consumed());
+    cell msg = begin_cell()
+        .store_uint(33792, 17) ;; NON_BOUNCEABLE, BASECHAIN
+        .store_uint(destination_hash, 256)
+        .store_coins(value)
+        .store_uint(0, 107)
+        .store_builder(body)
+        .end_cell();
+    send_raw_message(msg, SEND_MODE_REGULAR);
+}
+
+int send_hash_builder_carry_inbound(int destination_hash, int value, builder body) impure inline {
+    value += get_incoming_value() - get_storage_fees();
+    builder msg = begin_cell()
+        .store_uint(33792, 17) ;; NON_BOUNCEABLE, BASECHAIN
+        .store_uint(destination_hash, 256);
+    if (ubitsize(value) + body.builder_bits() > 639) {
+        value -= get_compute_fee(BASECHAIN, 1299 + 651 + 50 + gas_consumed());
+        msg = msg
+            .store_coins(value)
+            .store_uint(1, 107)
+            .store_ref(body.end_cell());
+    } else {
+        value -= get_compute_fee(BASECHAIN, 807 + 651 + 50 + gas_consumed());
+        msg = msg
+            .store_coins(value)
+            .store_uint(0, 107)
+            .store_builder(body);
+    }
+    return send_message(msg.end_cell(), SEND_MODE_REGULAR);
+}
+
+() send_cell_extra_carry_inbound(slice destination, int extra_id, int extra_amount, cell body) impure inline {
+    cell extra_dict = new_dict();
+    slice extra_amount_slice = begin_cell().store_coins(extra_amount).end_cell().begin_parse();
+    extra_dict~udict_set(32, extra_id, extra_amount_slice);
+
+    int value = get_incoming_value() - get_storage_fees();
+    value -= get_compute_fee(BASECHAIN, 906 + 651 + 50 + gas_consumed());
+    cell msg = begin_cell()
+        .store_uint(NON_BOUNCEABLE, 6)
+        .store_slice(destination)
+        .store_coins(value)
+        .store_dict(extra_dict)
+        .store_uint(1, 106)
+        .store_ref(body)
+        .end_cell();
+    send_raw_message(msg, SEND_MODE_REGULAR);
+}
+
+;; small = at most 519 bits and 3 refs
+() send_small_builder_extra_carry_inbound(slice destination, int value, int extra_id, int extra_amount, builder body) impure inline {
+    cell extra_dict = new_dict();
+    slice extra_amount_slice = begin_cell().store_coins(extra_amount).end_cell().begin_parse();
+    extra_dict~udict_set(32, extra_id, extra_amount_slice);
+
+    value += get_incoming_value() - get_storage_fees();
+    value -= get_compute_fee(BASECHAIN, 932 + 651 + 50 + gas_consumed());
+    cell msg = begin_cell()
+        .store_uint(NON_BOUNCEABLE, 6)
+        .store_slice(destination)
+        .store_coins(value)
+        .store_dict(extra_dict)
+        .store_uint(0, 106)
+        .store_builder(body)
+        .end_cell();
+    send_raw_message(msg, SEND_MODE_REGULAR);
+}
+
+;; small = at most 519 bits and 3 refs
+() send_small_builder_extra_carry_inbound2(slice destination, int value, cell extra_dict, builder body) impure inline {
+    value += get_incoming_value() - get_storage_fees();
+    value -= get_compute_fee(BASECHAIN, 932 + 651 + 50 + gas_consumed());
+    cell msg = begin_cell()
+        .store_uint(NON_BOUNCEABLE, 6)
+        .store_slice(destination)
+        .store_coins(value)
+        .store_dict(extra_dict)
+        .store_uint(0, 106)
+        .store_builder(body)
+        .end_cell();
+    send_raw_message(msg, SEND_MODE_REGULAR);
+}
+
+;; small = at most 518 bits and 3 refs
+() send_hash_cell_init_carry_inbound(int destination_hash, int value, cell body, cell init) impure inline_ref {
+    value += get_incoming_value() - get_storage_fees();
+    value -= get_compute_fee(BASECHAIN, 869 + 651 + 50 + gas_consumed());
+    cell msg = begin_cell()
+        .store_uint(33792, 17) ;; NON_BOUNCEABLE, BASECHAIN
+        .store_uint(destination_hash, 256)
+        .store_coins(value)
+        .store_uint(7, 108)
+        .store_ref(init)
+        .store_ref(body)
+        .end_cell();
+    send_raw_message(msg, SEND_MODE_REGULAR);
+}
+
+;; small = at most 518 bits and 3 refs
+() send_hash_small_builder_init_carry_inbound(int destination_hash, builder body, cell init) impure inline_ref {
+    int value = get_incoming_value() - get_storage_fees();
+    value -= get_compute_fee(BASECHAIN, 895 + 651 + 50 + gas_consumed());
+    cell msg = begin_cell()
+        .store_uint(33792, 17) ;; NON_BOUNCEABLE, BASECHAIN
+        .store_uint(destination_hash, 256)
+        .store_coins(value)
+        .store_uint(6, 108)
+        .store_ref(init)
+        .store_builder(body)
+        .end_cell();
+    send_raw_message(msg, SEND_MODE_REGULAR);
+}
+
+;; () send_cell_init_carry_inbound(slice destination, int value, cell body, cell init) impure inline {
+;;     value += get_incoming_value() - get_storage_fees();
+;;     value -= get_compute_fee(BASECHAIN, 880 + 651 + 50 + gas_consumed());
+;;     cell msg = begin_cell()
+;;         .store_uint(NON_BOUNCEABLE, 6)
+;;         .store_slice(destination)
+;;         .store_coins(value)
+;;         .store_uint(7, 108)
+;;         .store_ref(init)
+;;         .store_ref(body)
+;;         .end_cell();
+;;     send_raw_message(msg, SEND_MODE_REGULAR);
+;; }
+;;
+;; ;; small = at most 518 bits and 3 refs
+;; () send_small_builder_init_carry_inbound(slice destination, int value, builder body, cell init) impure inline {
+;;     value += get_incoming_value() - get_storage_fees();
+;;     value -= get_compute_fee(BASECHAIN, 906 + 651 + 50 + gas_consumed());
+;;     cell msg = begin_cell()
+;;         .store_uint(NON_BOUNCEABLE, 6)
+;;         .store_slice(destination)
+;;         .store_coins(value)
+;;         .store_uint(6, 108)
+;;         .store_ref(init)
+;;         .store_builder(body)
+;;         .end_cell();
+;;     send_raw_message(msg, SEND_MODE_REGULAR);
+;; }
+
+int send_event(builder body) impure inline {
+    ;; ext_out_msg_info$11 addr_none$00 addr_none$00
+    builder msg = begin_cell().store_uint(0x30, 6);
+    ;; created_lt:uint64 created_at:uint32 maybe=0 either=0/1
+    if (body.builder_bits() > 919) {
+        msg = msg.store_uint(1, 98).store_ref(body.end_cell());
+    } else {
+        msg = msg.store_uint(0, 98).store_builder(body);
+    }
+    return send_message(msg.end_cell(), SEND_MODE_REGULAR);
+}

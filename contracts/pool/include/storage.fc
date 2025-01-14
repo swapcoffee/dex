@@ -1,0 +1,71 @@
+#include "../../include/commons.fc";
+
+const int fee::max_nominator = 10000; ;; 10_000 <=> 1%
+const int fee::denominator = 1000000; ;; 1_000_000 <=> 100%
+
+const int pool_code_version = 1;
+
+global cell storage::init_code_cell;
+global cell storage::init_data_cell;
+global slice storage::factory_address;
+global slice storage::asset1;
+global slice storage::asset2;
+global int storage::amm;
+global cell storage::amm_settings;
+global int storage::is_active;
+global int storage::reserve1;
+global int storage::reserve2;
+global int storage::total_supply;
+global cell storage::lp_wallet_code;
+global int storage::protocol_fee;
+global int storage::lp_fee;
+
+() load_data() impure inline {
+    slice data_cs = get_data().begin_parse();
+    storage::init_code_cell = data_cs~load_ref();
+    storage::init_data_cell = data_cs~load_ref();
+    (storage::factory_address, storage::asset1, storage::asset2, storage::amm) = parse_pool_init_data(storage::init_data_cell);
+
+    storage::amm_settings = data_cs~load_maybe_ref();
+    storage::is_active = data_cs~load_bool();
+    storage::reserve1 = data_cs~load_coins();
+    storage::reserve2 = data_cs~load_coins();
+    storage::total_supply = data_cs~load_coins();
+    storage::protocol_fee = data_cs~load_uint(16);
+    storage::lp_fee = data_cs~load_uint(16);
+    storage::lp_wallet_code = data_cs~load_ref();
+}
+
+() update_settings(cell amm_settings, int protocol_fee, int lp_fee, int is_active) impure inline {
+    set_data(
+        begin_cell()
+            .store_ref(storage::init_code_cell)
+            .store_ref(storage::init_data_cell)
+            .store_maybe_ref(amm_settings)
+            .store_bool(is_active)
+            .store_coins(storage::reserve1)
+            .store_coins(storage::reserve2)
+            .store_coins(storage::total_supply)
+            .store_uint(protocol_fee, 16)
+            .store_uint(lp_fee, 16)
+            .store_ref(storage::lp_wallet_code)
+            .end_cell()
+    );
+}
+
+() update_reserves(int reserve1, int reserve2, int total_supply) impure inline {
+    set_data(
+        begin_cell()
+            .store_ref(storage::init_code_cell)
+            .store_ref(storage::init_data_cell)
+            .store_maybe_ref(storage::amm_settings)
+            .store_bool(storage::is_active)
+            .store_coins(reserve1)
+            .store_coins(reserve2)
+            .store_coins(total_supply)
+            .store_uint(storage::protocol_fee, 16)
+            .store_uint(storage::lp_fee, 16)
+            .store_ref(storage::lp_wallet_code)
+            .end_cell()
+    );
+}

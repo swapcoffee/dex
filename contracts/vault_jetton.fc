@@ -1,0 +1,305 @@
+#include "include/commons.fc";
+#include "include/constants.fc";
+#include "include/messages.fc";
+#include "include/gas.fc";
+#include "include/stdlib.fc";
+#include "include/throw_safely.fc";
+
+global cell storage::init_code_cell;
+global cell storage::init_data_cell;
+global slice storage::factory_address;
+global slice storage::asset;
+global int storage::is_active;
+global slice storage::jetton_wallet_address;
+
+() load_data() impure inline {
+    slice data_cs = get_data().begin_parse();
+    storage::init_code_cell = data_cs~load_ref();
+    storage::init_data_cell = data_cs~load_ref();
+    (storage::factory_address, storage::asset) = parse_vault_init_data(storage::init_data_cell);
+
+    storage::is_active = data_cs~load_bool();
+    if (storage::is_active) {
+        storage::jetton_wallet_address = data_cs~load_msg_addr();
+    }
+}
+
+() activate(slice jetton_wallet_address) impure inline {
+    set_data(
+        begin_cell()
+            .store_ref(storage::init_code_cell)
+            .store_ref(storage::init_data_cell)
+            .store_bool(true)
+            .store_slice(jetton_wallet_address)
+            .end_cell()
+    );
+}
+
+() recv_internal(cell in_msg_full, slice in_msg_body) impure {
+    slice cs = in_msg_full.begin_parse();
+
+    int flags = cs~load_msg_flags();
+    if (flags & 1) { ;; ignore bounced
+        return ();
+    }
+
+    load_data();
+
+    slice sender_address = cs~load_msg_addr();
+    force_chain(sender_address);
+    cs~load_msg_addr(); ;; skip dst
+    int msg_value = cs~load_coins();
+    cs~skip_bits(1); ;; skip extracurrency collection
+    cs~load_coins(); ;; skip ihr_fee
+    int fwd_fee = get_original_fwd_fee(BASECHAIN, cs~load_coins());
+    (int opcode, int query_id) = (in_msg_body~load_uint(32), in_msg_body~load_uint(64));
+    if (opcode == opcodes::transfer_notification) {
+        throw_unless(errors::not_active, storage::is_active);
+        throw_unless(errors::wrong_sender, equal_slice_bits(storage::jetton_wallet_address, sender_address));
+
+        int amount = in_msg_body~load_coins();
+        slice from_addr = in_msg_body~load_msg_addr();
+        cell fwd_payload = in_msg_body~load_ref();
+        slice fwd_payload_cs = fwd_payload.begin_parse();
+        throw_unless(errors::invalid_balance, amount > 0);
+
+        int transferred_opcode = fwd_payload_cs~load_uint(32);
+        if (transferred_opcode == opcodes::swap_jetton) {
+            int ton_required_for_gas = get_compute_fee(BASECHAIN, gas::swap::computation) + fwd_fee * gas::swap::fwd_steps;
+            if (msg_value < ton_required_for_gas) {
+                throw_safely_jetton(
+                    errors::not_enough_gas,
+                    storage::jetton_wallet_address,
+                    from_addr,
+                    query_id,
+                    amount
+                );
+            }
+            int pool_address_hash = fwd_payload_cs~load_uint(256);
+            int min_output_amount = fwd_payload_cs~load_coins();
+            cell next = fwd_payload_cs~load_maybe_ref();
+            cell params = fwd_payload_cs~load_ref();
+
+            send_hash_small_builder_carry_inbound(
+                pool_address_hash,
+                0,
+                begin_cell()
+                    .store_uint(opcodes::swap_internal, 32)
+                    .store_uint(query_id, 64)
+                    .store_coins(amount)
+                    .store_uint(0, 1)
+                    .store_coins(min_output_amount)
+                    .store_maybe_ref(next)
+                    .store_ref(params)
+                    .store_ref(storage::init_data_cell)
+            );
+        } elseif (transferred_opcode == opcodes::deposit_liquidity_jetton) {
+            int ton_required_for_gas = get_compute_fee(BASECHAIN, gas::deposit_liquidity::computation) + fwd_fee * gas::deposit_liquidity::fwd_steps;
+            if (msg_value < ton_required_for_gas) {
+                throw_safely_jetton(
+                    errors::not_enough_gas,
+                    storage::jetton_wallet_address,
+                    from_addr,
+                    query_id,
+                    amount
+                );
+            }
+            cell liquidity_params = fwd_payload_cs~load_ref();
+            cell pool_params = fwd_payload_cs~load_ref();
+            (_, (slice asset1, slice asset2, int amm)) = parse_pool_params(pool_params.begin_parse());
+            if (equal_slice_bits(asset1, asset2)) {
+                throw_safely_jetton(
+                    errors::same_assets,
+                    storage::jetton_wallet_address,
+                    from_addr,
+                    query_id,
+                    amount
+                );
+            }
+            (asset1, asset2, int sorted) = sort_assets(asset1, asset2);
+
+            send_small_builder_carry_inbound(
+                storage::factory_address,
+                0,
+                begin_cell()
+                    .store_uint(opcodes::create_liquidity_depository_request, 32)
+                    .store_uint(query_id, 64)
+                    .store_coins(amount)
+                    .store_ref(liquidity_params)
+                    .store_ref(
+                        sorted ? begin_cell()
+                            .store_slice(asset1)
+                            .store_slice(asset2)
+                            .store_uint(amm, 3)
+                            .end_cell() : pool_params
+                    )
+                    .store_ref(storage::init_data_cell)
+            );
+        } elseif (transferred_opcode == opcodes::create_pool_jetton) {
+            int ton_required_for_gas = get_compute_fee(BASECHAIN, gas::create_pool::computation) + fwd_fee * gas::create_pool::fwd_steps;
+            if (msg_value < ton_required_for_gas) {
+                throw_safely_jetton(
+                    errors::not_enough_gas,
+                    storage::jetton_wallet_address,
+                    from_addr,
+                    query_id,
+                    amount
+                );
+            }
+            (slice asset1, slice asset2, int amm) = fwd_payload_cs~parse_pool_params();
+            cell amm_settings = fwd_payload_cs~load_maybe_ref();
+            cell extra_settings = fwd_payload_cs~load_maybe_ref();
+            cell notification_data = fwd_payload_cs~load_maybe_ref();
+
+            if (equal_slice_bits(asset1, asset2)) {
+                throw_safely_jetton(
+                    errors::same_assets,
+                    storage::jetton_wallet_address,
+                    from_addr,
+                    query_id,
+                    amount
+                );
+            }
+            (asset1, asset2, _) = sort_assets(asset1, asset2);
+
+            send_small_builder_carry_inbound(
+                storage::factory_address,
+                0,
+                begin_cell()
+                    .store_uint(opcodes::create_pool_creator_request, 32)
+                    .store_uint(query_id, 64)
+                    .store_coins(amount)
+                    .store_ref(
+                        begin_cell()
+                            .store_slice(asset1)
+                            .store_slice(asset2)
+                            .store_uint(amm, 3)
+                            .store_maybe_ref(extra_settings)
+                            .store_maybe_ref(notification_data)
+                            .end_cell()
+                    )
+                    .store_maybe_ref(amm_settings)
+                    .store_slice(from_addr)
+                    .store_ref(storage::init_data_cell)
+            );
+        } else {
+            throw_safely_jetton(
+                errors::unknown_opcode,
+                storage::jetton_wallet_address,
+                from_addr,
+                query_id,
+                amount
+            );
+        }
+    } elseif (opcode == opcodes::payout_internal) {
+        throw_unless(errors::not_active, storage::is_active);
+        slice recipient = in_msg_body~load_msg_addr();
+        int amount = in_msg_body~load_coins();
+        cell notification_data = in_msg_body~load_maybe_ref();
+        slice notification_receiver = recipient;
+        cell notification = null();
+        int notification_fwd_gas = 0;
+        ifnot (cell_null?(notification_data)) {
+            slice s = notification_data.begin_parse();
+            notification_receiver = s~load_msg_addr();
+            notification = s~load_ref();
+            notification_fwd_gas = s~load_coins();
+        }
+
+        verify_proof(storage::factory_address, storage::init_code_cell, sender_address, in_msg_body~load_maybe_ref(), true);
+        if (cell_null?(notification)) {
+            send_cell_carry_inbound(
+                storage::jetton_wallet_address,
+                0,
+                begin_cell()
+                    .store_uint(opcodes::transfer, 32)
+                    .store_uint(query_id, 64)
+                    .store_coins(amount)
+                    .store_slice(recipient)
+                    .store_slice(recipient)
+                    .store_uint(0, 1)
+                    .store_coins(0)
+                    .store_uint(0, 1)
+                    .end_cell()
+            );
+        } elseif (is_address_none(notification_receiver) | equal_slice_bits(recipient, notification_receiver)) {
+            send_cell_carry_inbound(
+                storage::jetton_wallet_address,
+                0,
+                begin_cell()
+                    .store_uint(opcodes::transfer, 32)
+                    .store_uint(query_id, 64)
+                    .store_coins(amount)
+                    .store_slice(recipient)
+                    .store_slice(recipient)
+                    .store_uint(0, 1)
+                    .store_coins(notification_fwd_gas)
+                    .store_maybe_ref(notification)
+                    .end_cell()
+            );
+        } else {
+            send_cell(
+                notification_receiver,
+                notification_fwd_gas,
+                notification
+            );
+            send_cell_carry_inbound(
+                storage::jetton_wallet_address,
+                - notification_fwd_gas,
+                begin_cell()
+                    .store_uint(opcodes::transfer, 32)
+                    .store_uint(query_id, 64)
+                    .store_coins(amount)
+                    .store_slice(recipient)
+                    .store_slice(recipient)
+                    .store_uint(0, 1)
+                    .store_coins(0)
+                    .store_uint(0, 1)
+                    .end_cell()
+            );
+        }
+    } elseif (opcode == opcodes::create_vault_internal) {
+        throw_unless(errors::not_a_factory, equal_slice_bits(storage::factory_address, sender_address));
+        throw_if(errors::already_active, storage::is_active);
+        send_small_builder_carry_inbound(
+            asset_jetton_to_address(storage::asset),
+            0,
+            begin_cell()
+                .store_uint(opcodes::provide_wallet_address, 32)
+                .store_uint(query_id, 64)
+                .store_slice(my_address())
+                .store_uint(0, 1)
+        );
+    } elseif (opcode == opcodes::take_wallet_address) {
+        ;; see: https://github.com/ton-blockchain/TEPs/blob/master/text/0089-jetton-wallet-discovery.md
+        throw_unless(errors::wrong_sender, equal_slice_bits(asset_jetton_to_address(storage::asset), sender_address));
+        throw_if(errors::already_active, storage::is_active);
+        try {
+            slice jetton_wallet_address = in_msg_body~load_msg_addr();
+            throw_if(errors::unexpected, is_address_none(jetton_wallet_address));
+            activate(jetton_wallet_address);
+        } catch (_) {
+            throw(errors::invalid_jetton_master);
+        }
+    } elseif (opcode == opcodes::activate_vault_internal) {
+        throw_unless(errors::not_a_factory, equal_slice_bits(storage::factory_address, sender_address));
+        throw_if(errors::already_active, storage::is_active);
+        activate(in_msg_body~load_msg_addr());
+    } elseif (opcode == opcodes::update_contract_internal) {
+        throw_unless(errors::not_a_factory, equal_slice_bits(storage::factory_address, sender_address));
+        update_contract(query_id, in_msg_body~load_msg_addr(), in_msg_body);
+    } else {
+        throw_safely_native(errors::unknown_opcode, sender_address, query_id);
+    }
+    return ();
+}
+
+slice get_asset() method_id {
+    load_data();
+    return storage::asset;
+}
+
+int is_active() method_id {
+    load_data();
+    return storage::is_active;
+}

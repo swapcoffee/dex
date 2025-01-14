@@ -1,0 +1,29 @@
+#include "../include/commons.fc";
+#include "../include/stdlib.fc";
+#include "../pool/amm/constant_product.fc";
+#include "../pool/include/jetton_based.fc";
+#include "../pool/include/storage.fc";
+
+() recv_internal(cell in_msg_full, slice in_msg_body) impure {
+    return ();
+}
+
+(int, int, int, int) get_add_liq(int total_supply, int amount1, int amount2, int reserve1, int reserve2) method_id {
+    storage::total_supply = total_supply;
+    storage::reserve1 = reserve1;
+    storage::reserve2 = reserve2;
+    (int excno, int a, int b, int c, int d) = add_liquidity_impl(amount1, amount2);
+    throw_unless(excno, excno == 0);
+    return (a, b, c, d);
+}
+
+(int) get_swap_volatile(int input_amount, int reserve_in, int reserve_out) method_id {
+    (int excno, int a) = swap_impl(
+        direction::forward,
+        input_amount,
+        reserve_in,
+        reserve_out
+    );
+    throw_unless(excno, excno == 0);
+    return a;
+}

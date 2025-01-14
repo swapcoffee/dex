@@ -1,0 +1,245 @@
+import {Blockchain, SandboxContract, TreasuryContract} from '@ton/sandbox';
+import {Address, beginCell, toNano} from '@ton/core';
+import '@ton/test-utils';
+import {Factory} from "../wrappers/Factory";
+import {VaultJetton} from "../wrappers/VaultJetton";
+import {CodeCells, compileCodes, deployJetton} from "./utils";
+import {JettonMaster, JettonWallet} from "../wrappers/Jetton";
+import {VaultNative} from "../wrappers/VaultNative";
+import {
+    AMM,
+    AssetExtra,
+    AssetJetton,
+    AssetNative,
+    PoolParams, SwapParams, SwapStepParams
+} from "../wrappers/types";
+import {VaultExtra} from "../wrappers/VaultExtra";
+import {printTransactions} from "../wrappers/utils";
+
+describe('Test', () => {
+    let codeCells: CodeCells;
+    beforeAll(async () => {
+        codeCells = await compileCodes();
+    });
+
+    let blockchain: Blockchain;
+    let admin: SandboxContract<TreasuryContract>;
+    let factory: SandboxContract<Factory>;
+
+    let jettonMaster1: SandboxContract<JettonMaster>;
+    let vaultNative: SandboxContract<VaultNative>;
+    let vaultJetton1: SandboxContract<VaultJetton>;
+
+    async function doSwap(
+        sender: SandboxContract<TreasuryContract>,
+        vault: SandboxContract<VaultNative> | SandboxContract<VaultJetton> | SandboxContract<VaultExtra>,
+        amount: bigint,
+        swapStepParam: SwapStepParams,
+        params: SwapParams
+    ) {
+
+        const asset = await vault.getAssetParsed()
+        if (asset instanceof AssetNative) {
+            return await (vault as SandboxContract<VaultNative>).sendSwapNative(
+                sender.getSender(),
+                amount + toNano(1),
+                amount,
+                swapStepParam,
+                params
+            )
+        } else if (asset instanceof AssetJetton) {
+            let masterContract = blockchain.openContract(
+                JettonMaster.createFromAddress(
+                    new Address(
+                        Number(asset.chain),
+                        beginCell().storeUint(asset.hash, 256).endCell().beginParse().loadBuffer(32)
+                    )
+                )
+            )
+            let jettonVault = blockchain.openContract(
+                JettonWallet.createFromAddress(
+                    await masterContract.getWalletAddress(sender.address)
+                )
+            )
+            return await jettonVault.sendSwapJetton(
+                sender.getSender(),
+                toNano(1),
+                vault.address,
+                amount,
+                swapStepParam,
+                params
+            )
+        } else if (asset instanceof AssetExtra) {
+            return await (vault as SandboxContract<VaultExtra>).sendSwapExtra(
+                sender.getSender(),
+                toNano(1),
+                swapStepParam,
+                params
+            )
+        } else {
+            throw new Error("unexpected asset type")
+        }
+    }
+
+    beforeEach(async () => {
+        blockchain = await Blockchain.create();
+        admin = await blockchain.treasury('admin', {balance: toNano(1000.0)});
+        console.log('admin address =', admin.address.toRawString());
+        factory = blockchain.openContract(
+            Factory.createFromData(admin.address, codeCells)
+        );
+        await factory.sendDeploy(admin.getSender(), toNano(1.0));
+
+        let deploy = await deployJetton(blockchain, admin, "TST1");
+        jettonMaster1 = deploy.master;
+
+        await factory.sendCreateVault(admin.getSender(), toNano(.04), null);
+        await factory.sendCreateVault(admin.getSender(), toNano(.04), jettonMaster1.address);
+
+        vaultNative = blockchain.openContract(VaultNative.createFromAddress(await factory.getVaultAddress(null)));
+        vaultJetton1 = blockchain.openContract(VaultJetton.createFromAddress(await factory.getVaultAddress(jettonMaster1.address)));
+
+        await vaultNative.sendCreatePoolNative(
+            admin.getSender(),
+            toNano(5),
+            toNano(5),
+            new PoolParams(
+                AssetNative.INSTANCE,
+                AssetJetton.fromAddress(jettonMaster1.address),
+                AMM.ConstantProduct
+            ),
+            null,
+            null
+        );
+
+        let adminJettonWallet1 = blockchain.openContract(
+            JettonWallet.createFromAddress(
+                await blockchain.openContract(
+                    JettonMaster.createFromAddress(jettonMaster1.address)).getWalletAddress(admin.address)
+            )
+        )
+
+        // native -> jetton1 stable
+        {
+            await adminJettonWallet1.sendCreatePoolJetton(admin.getSender(),
+                toNano(1),
+                vaultJetton1.address,
+                17n,
+                new PoolParams(
+                    AssetNative.INSTANCE,
+                    AssetJetton.fromAddress(jettonMaster1.address),
+                    AMM.CurveFiStable
+                ),
+                beginCell()
+                    .storeUint(2_000, 16)
+                    .storeCoins(1)
+                    .storeCoins(1)
+                    .endCell(),
+                null
+            )
+            await vaultNative.sendCreatePoolNative(
+                admin.getSender(),
+                toNano(6),
+                1999n,
+                new PoolParams(
+                    AssetNative.INSTANCE,
+                    AssetJetton.fromAddress(jettonMaster1.address),
+                    AMM.CurveFiStable
+                ),
+                beginCell()
+                    .storeUint(2_000, 16)
+                    .storeCoins(1)
+                    .storeCoins(1)
+                    .endCell(),
+                null
+            )
+        }
+
+    });
+
+    test('test do stable swap forward', async () => {
+        let vaultA = vaultJetton1;
+        let vaultB = vaultNative;
+        let amm = AMM.CurveFiStable;
+
+        let pool = blockchain.openContract(
+            await factory.getPoolJettonBased(
+                await vaultA.getAsset(),
+                await vaultB.getAsset(),
+                amm
+            )
+        )
+        console.log(await pool.getPoolData());
+
+        let txs = await doSwap(admin,
+            vaultA,
+            1000n,
+            new SwapStepParams(
+                await factory.getPoolAddressHash(await vaultA.getAsset(), await vaultB.getAsset(), amm),
+                0n,
+                null
+            ),
+            new SwapParams(
+                BigInt((1 << 30) * 2),
+                admin.address,
+                null,
+                null
+            )
+        );
+        expect(txs.transactions).toHaveTransaction(
+            {
+                to: pool.address,
+                success: true,
+                exitCode: 0
+            }
+        )
+        printTransactions(txs.transactions)
+    });
+
+    test('test do stable swap backward', async () => {
+        let vaultA = vaultNative;
+        let vaultB = vaultJetton1;
+        let amm = AMM.CurveFiStable;
+
+        let pool = blockchain.openContract(
+            await factory.getPoolJettonBased(
+                await vaultA.getAsset(),
+                await vaultB.getAsset(),
+                amm
+            )
+        )
+
+        blockchain.setVerbosityForAddress(
+            Address.parse("0:e9214ed692afb18f9e11190555db7e372329828df44dd4dffab8a0b14dd809fa"),
+            {
+                print: true,
+                blockchainLogs: true,
+                vmLogs: 'vm_logs_verbose',
+                debugLogs: true
+            });
+        let txs = await doSwap(admin,
+            vaultA,
+            1000n,
+            new SwapStepParams(
+                await factory.getPoolAddressHash(await vaultA.getAsset(), await vaultB.getAsset(), amm),
+                0n,
+                null
+            ),
+            new SwapParams(
+                BigInt((1 << 30) * 2),
+                admin.address,
+                null,
+                null
+            )
+        );
+        printTransactions(txs.transactions);
+        expect(txs.transactions).toHaveTransaction(
+            {
+                to: pool.address,
+                success: true,
+                exitCode: 0
+            }
+        )
+    });
+
+});

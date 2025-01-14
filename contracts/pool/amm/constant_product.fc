@@ -1,0 +1,39 @@
+#include "../include/storage.fc";
+
+int amm_settings_valid?(cell settings) inline {
+    if (cell_null?(settings)) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+(int, int) swap_impl(int direction, int input_amount, int reserve_in, int reserve_out) inline {
+    return (0, muldiv(input_amount, reserve_out, reserve_in + input_amount));
+}
+
+(int, int, int, int, int) add_liquidity_impl(int amount1, int amount2) inline {
+    ;; int total_supply, int amount1, int amount2, int reserve1, int reserve2
+    if (storage::total_supply == 0) {
+        int initial_liquidity = sqrt(amount1 * amount2);
+        if (initial_liquidity < minimum_liquidity) {
+            return (errors::invalid_liquidity, 0, 0, 0, 0);
+        }
+        return (0, amount1, amount2, initial_liquidity - minimum_liquidity, minimum_liquidity);
+    }
+
+    int lp1 = muldiv(amount1, storage::total_supply, storage::reserve1);
+    int lp2 = muldiv(amount2, storage::total_supply, storage::reserve2);
+    int lp_amount = min(lp1, lp2);
+    if (lp1 < lp2) {
+        amount2 = muldiv(lp1, storage::reserve2, storage::total_supply);
+    } elseif (lp1 > lp2) {
+        amount1 = muldiv(lp2, storage::reserve1, storage::total_supply);
+    }
+
+    ifnot ((amount1 > 0) & (amount2 > 0)) {
+        return (errors::invalid_liquidity, 0, 0, 0, 0);
+    } else {
+        return (0, amount1, amount2, lp_amount, 0);
+    }
+}

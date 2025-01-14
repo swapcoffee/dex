@@ -1,0 +1,31 @@
+#include "constants.fc";
+#include "stdlib.fc";
+
+const int gas::create_vault::min = 40000000; ;; 0.04 TON
+const int gas::create_vault::computation = 27984 * 2; ;; *2, because fwd is not counted
+;; path to pool creator = 8909 * 2 + 12686 * 2 + 6960 + 9126
+;; path from pool creator = 1215 + 19959 + 7782 + 309
+const int gas::create_pool::computation = (8909 * 2 + 12686 * 2 + 6960 + 9126 + 1215 + 19959 + 7782 + 309) / 2 + 1; ;; /2, because there are 2 messages
+const int gas::create_pool::fwd_steps = 10 / 2; ;; /2, because there are 2 messages
+;; path to liquidity depository = 7503 * 2 + 11780 * 2 + 6679 + 11388
+;; path from liquidity depository = 21136 + 9929 + 309 + 309
+const int gas::deposit_liquidity::computation = (7503 * 2 + 11780 * 2 + 6679 + 11388 + 21136 + 9929 + 309 + 309) / 2 + 1; ;; /2, because there are 2 messages
+const int gas::deposit_liquidity::fwd_steps = 10 / 2; ;; /2, because there are 2 messages
+;; max(vault in) = 5682
+;; max(vault out) = 7173
+;; max(pool swap) = 22182
+;; jetton delivery afterwards = 8706 + 7777 + 309
+const int gas::swap::computation = 5682 + 7173 + 22182 + 8706 + 7777 + 309;
+const int gas::swap::fwd_steps = 3;
+
+tuple get_full_incoming_value() asm "INCOMINGVALUE";
+
+int get_incoming_value() inline {
+    return first(get_full_incoming_value());
+}
+
+int get_storage_fees() asm "STORAGEFEES";
+
+int get_inbound_balance_left() inline {
+    return get_incoming_value() - get_storage_fees() - get_compute_fee(BASECHAIN, 34 + gas_consumed());
+}

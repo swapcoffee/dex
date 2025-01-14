@@ -1,0 +1,470 @@
+#include "commons.fc";
+#include "storage.fc";
+#include "../../include/commons.fc";
+#include "../../include/constants.fc";
+
+{- SWAP -}
+
+(int, int, int, int, int, int) perform_swap(int direction, int amount, int min_output_amount) inline {
+    ;; retrieving fees from c4
+    int lp_fee = 0;
+    int reserve_in = storage::reserve1;
+    int reserve_out = storage::reserve2;
+    if (direction == direction::backward) {
+        int t = reserve_in;
+        reserve_in = reserve_out;
+        reserve_out = t;
+    }
+    ;; applying fees to input
+    int sum_nominator = storage::protocol_fee + storage::lp_fee;
+    if (sum_nominator != 0) {
+        int sum_fee = muldiv(amount, sum_nominator, fee::denominator);
+        amount -= sum_fee;
+        lp_fee = muldiv(sum_fee, storage::lp_fee, sum_nominator);
+    }
+    ;; performing swap
+    (int excno, int output_amount) = swap_impl(direction, amount, reserve_in, reserve_out);
+    ifnot (excno == 0) {
+        return (excno, amount, 0, 0, 0, 0);
+    }
+    if (output_amount < min_output_amount) {
+        return (errors::slippage_tolerated, amount, 0, reserve_in, reserve_out, 0);
+    }
+    return (0, amount, output_amount, reserve_in, reserve_out, lp_fee);
+}
+
+() swap_internal(slice sender_address, int query_id, slice in_msg_body, int do_verify_proof) impure inline {
+    int amount = in_msg_body~load_coins();
+    slice previous_asset_hint = "";
+    ifnot (in_msg_body~load_uint(1) == 0) {
+        previous_asset_hint = in_msg_body~load_asset();
+    }
+    int min_output_amount = in_msg_body~load_coins();
+    cell next = in_msg_body~load_maybe_ref();
+    cell params = in_msg_body~load_ref();
+    cell proof = in_msg_body~load_ref();
+
+    slice proof_slice = do_verify_proof ? verify_proof(
+        storage::factory_address,
+        storage::init_code_cell,
+        sender_address,
+        proof,
+        false
+    ) : proof.begin_parse();
+
+    slice params_cs = params.begin_parse();
+    int deadline = params_cs~load_uint(32);
+    slice recipient = params_cs~load_msg_addr();
+    params_cs~load_msg_addr(); ;; referral for analytical purposes
+
+    cell notification_data = params_cs~load_maybe_ref();
+    cell notification_data_failure = null();
+    cell notification_data_success = null();
+    ifnot (cell_null?(notification_data)) {
+        slice notification_data_cs = notification_data.begin_parse();
+        notification_data_failure = notification_data_cs~load_maybe_ref();
+        notification_data_success = notification_data_cs~load_maybe_ref();
+    }
+
+    int direction = get_direction_from_proof(proof_slice, previous_asset_hint);
+    slice input_asset = storage::asset1;
+    if (direction == direction::backward) {
+        input_asset = storage::asset2;
+    }
+
+    ifnot (storage::is_active) {
+        throw_safely_for_swap(
+            errors::not_active,
+            query_id,
+            input_asset,
+            amount,
+            recipient,
+            null(),
+            notification_data_failure
+        );
+    }
+    if (deadline < now()) {
+        throw_safely_for_swap(
+            errors::deadline_exceeded,
+            query_id,
+            input_asset,
+            amount,
+            recipient,
+            null(),
+            notification_data_failure
+        );
+    }
+    (int swap_excno, int input_amount, int output_amount, int r1, int r2, int lp_fee) = perform_swap(direction, amount, min_output_amount);
+    ifnot (swap_excno == 0) {
+        throw_safely_for_swap(
+            swap_excno,
+            query_id,
+            input_asset,
+            amount,
+            recipient,
+            begin_cell()
+                .store_coins(r1)
+                .store_coins(r2)
+                .end_cell(),
+            notification_data_failure
+        );
+    }
+    slice output_asset = storage::asset2;
+    if (direction == direction::forward) {
+        update_reserves(r1 + input_amount + lp_fee, r2 - output_amount, storage::total_supply);
+    } else {
+        output_asset = storage::asset1;
+        update_reserves(r2 - output_amount, r1 + input_amount + lp_fee, storage::total_supply);
+    }
+    int fwd_fee = send_event(
+        begin_cell()
+            .store_uint(opcodes::swap_successful_event, 32)
+            .store_uint(query_id, 64)
+            .store_slice(input_asset)
+            .store_coins(amount)
+            .store_coins(output_amount)
+            .store_coins(r1)
+            .store_coins(r2)
+    );
+    if (cell_null?(next)) {
+        int vault_address_hash = calculate_vault_address_hash(
+            storage::factory_address,
+            storage::init_code_cell,
+            output_asset
+        );
+        builder body = build_payout_internal_body(query_id, recipient, output_amount, notification_data_success, storage::init_data_cell);
+        send_hash_small_builder_carry_inbound(vault_address_hash, - fwd_fee, body);
+    } else {
+        slice next_cs = next.begin_parse();
+        int next_pool_address_hash = next_cs~load_uint(256);
+        int next_min_output_amount = next_cs~load_coins();
+        cell next_next = next_cs~load_maybe_ref();
+        builder body = begin_cell()
+            .store_uint(opcodes::swap_internal, 32)
+            .store_uint(query_id, 64)
+            .store_coins(output_amount)
+            .store_uint(1, 1) ;; pass asset hint always, because we don't know destination's address content
+            .store_slice(output_asset)
+            .store_coins(next_min_output_amount)
+            .store_maybe_ref(next_next)
+            .store_ref(params)
+            .store_ref(storage::init_data_cell);
+        send_hash_builder_carry_inbound(next_pool_address_hash, - fwd_fee, body);
+    }
+}
+
+{- LIQUIDITY -}
+
+() deposit_liquidity(slice sender_address, int query_id, slice in_msg_body, int creation) impure inline_ref {
+    int amount1 = in_msg_body~load_coins();
+    int amount2 = in_msg_body~load_coins();
+    int min_lp_amount = 1;
+    slice recipient = "";
+    cell notification_data = null();
+    cell notification_data_single = null();
+    if (creation) {
+        recipient = in_msg_body~load_msg_addr();
+        in_msg_body~load_maybe_ref(); ;; extra_settings, will be used for concentrated liquidity later
+        notification_data = in_msg_body~load_maybe_ref();
+        int excno = 0;
+        int self_destroy = true;
+        ifnot (amm_settings_valid?(storage::amm_settings)) {
+            excno = errors::invalid_amm_settings;
+        }
+        if (excno == 0) {
+            if ((storage::reserve1 > 0) | (storage::reserve2 > 0) | (storage::total_supply > 0)) {
+                excno = errors::pool_already_exists;
+                self_destroy = false;
+            }
+        }
+        ifnot (excno == 0) {
+            throw_safely_for_liquidity(
+                excno,
+                query_id,
+                amount1,
+                amount2,
+                recipient,
+                min_lp_amount,
+                notification_data,
+                self_destroy
+            );
+        }
+    } else {
+        slice params = in_msg_body~load_ref().begin_parse();
+        cell proof = in_msg_body~load_ref();
+        verify_proof(storage::factory_address, storage::init_code_cell, sender_address, proof, false);
+        recipient = params~load_msg_addr();
+        params~load_msg_addr(); ;; used in offchain tracking
+        int deadline = params~load_uint(32);
+        int condition_type = params~load_uint(2);
+        int excno = 0;
+        if (condition_type & 1) {
+            min_lp_amount = params~load_coins();
+        }
+        if (condition_type & 2) {
+            int denominator = params~load_uint(16);
+            int min_nominator = params~load_uint(16);
+            int max_nominator = params~load_uint(16);
+            ifnot ((denominator > 0) & (min_nominator >= 0) & (max_nominator >= 0)) {
+                excno = errors::invalid_condition;
+            } else {
+                int valid = (compare_fractions(
+                    amount1 * min_nominator,
+                    amount2 * denominator,
+                    storage::reserve1,
+                    storage::reserve2
+                ) <= 0) | (compare_fractions(
+                    amount1 * max_nominator,
+                    amount2 * denominator,
+                    storage::reserve1,
+                    storage::reserve2
+                ) >= 0);
+                ifnot (valid) {
+                    excno = errors::reserves_ratio_failed;
+                }
+            }
+        }
+        params~load_maybe_ref(); ;; extra_settings, will be used for concentrated liquidity later
+        notification_data = params~load_maybe_ref();
+        ifnot (storage::is_active) {
+            excno = errors::not_active;
+        } elseif (deadline < now()) {
+            excno = errors::deadline_exceeded;
+        }
+        ifnot (excno == 0) {
+            throw_safely_for_liquidity(
+                excno,
+                query_id,
+                amount1,
+                amount2,
+                recipient,
+                min_lp_amount,
+                notification_data,
+                false
+            );
+        }
+    }
+
+    ;; lp_to_lock -- permanently lock the first MINIMUM_LIQUIDITY tokens
+    (int excno, int amount1_used, int amount2_used, int lp_amount, int lp_to_lock) = add_liquidity_impl(amount1, amount2);
+    if ((excno == 0) & (lp_amount < min_lp_amount)) {
+        excno = errors::slippage_tolerated;
+    }
+    ifnot (excno == 0) {
+        throw_safely_for_liquidity(
+            excno,
+            query_id,
+            amount1,
+            amount2,
+            recipient,
+            min_lp_amount,
+            notification_data,
+            creation
+        );
+    }
+    int reserve1_new = storage::reserve1 + amount1_used;
+    int reserve2_new = storage::reserve2 + amount2_used;
+    int total_supply_new = storage::total_supply + lp_amount + lp_to_lock;
+    int fwd_fee = send_event(
+        begin_cell()
+            .store_uint(opcodes::deposit_liquidity_successful_event, 32)
+            .store_uint(query_id, 64)
+            .store_coins(amount1_used)
+            .store_coins(amount2_used)
+            .store_coins(lp_amount)
+            .store_coins(storage::total_supply)
+            .store_coins(total_supply_new)
+            .store_coins(storage::reserve1)
+            .store_coins(storage::reserve2)
+    );
+    update_reserves(reserve1_new, reserve2_new, total_supply_new);
+    if (cell_null?(notification_data)) {
+        notification_data_single = null();
+    } else {
+        slice notification_data_cs = notification_data.begin_parse();
+        notification_data_single = notification_data_cs~load_maybe_ref(); ;; on_success
+    }
+    slice notification_receiver = address_none();
+    int notification_fwd_gas = 0;
+    cell notification = null();
+    ifnot (cell_null?(notification_data_single)) {
+        slice cs = notification_data_single.begin_parse();
+        notification_receiver = cs~load_msg_addr();
+        notification_fwd_gas = cs~load_coins();
+        notification = cs~load_ref();
+    }
+    int inbound_balance_left = get_inbound_balance_left();
+    throw_unless(errors::not_enough_gas, inbound_balance_left > notification_fwd_gas);
+    cell state_init = gen_lp_wallet_state_init(recipient, my_address(), storage::lp_wallet_code);
+    int destination_hash = cell_hash(state_init);
+
+    int fwd_value = (get_inbound_balance_left() - notification_fwd_gas - fwd_fee) / 3;
+    int fwd_value_sum = fwd_fee;
+    if (amount1 > amount1_used) {
+        fwd_value_sum += fwd_value;
+        send_hash_builder(
+            calculate_vault_address_hash(
+                storage::factory_address,
+                storage::init_code_cell,
+                storage::asset1
+            ),
+            fwd_value,
+            build_payout_internal_body(query_id, recipient, amount1 - amount1_used, null(), storage::init_data_cell),
+            SEND_MODE_REGULAR
+        );
+    }
+    if (amount2 > amount2_used) {
+        fwd_value_sum += fwd_value;
+        send_hash_builder(
+            calculate_vault_address_hash(
+                storage::factory_address,
+                storage::init_code_cell,
+                storage::asset2
+            ),
+            fwd_value,
+            build_payout_internal_body(query_id, recipient, amount2 - amount2_used, null(), storage::init_data_cell),
+            SEND_MODE_REGULAR
+        );
+    }
+    if (cell_null?(notification)) {
+        send_hash_cell_init_carry_inbound(
+            destination_hash,
+            - fwd_value_sum,
+            begin_cell()
+                .store_uint(opcodes::internal_transfer, 32)
+                .store_uint(query_id, 64)
+                .store_coins(lp_amount)
+                .store_slice(my_address())
+                .store_slice(recipient)
+                .store_coins(0)
+                .store_uint(0, 1)
+                .end_cell(),
+            state_init
+        );
+    } elseif (is_address_none(notification_receiver) | equal_slice_bits(recipient, notification_receiver)) {
+        send_hash_cell_init_carry_inbound(
+            destination_hash,
+            - fwd_value_sum,
+            begin_cell()
+                .store_uint(opcodes::internal_transfer, 32)
+                .store_uint(query_id, 64)
+                .store_coins(lp_amount)
+                .store_slice(my_address())
+                .store_slice(recipient)
+                .store_coins(notification_fwd_gas)
+                .store_maybe_ref(notification)
+                .end_cell(),
+            state_init
+        );
+    } else {
+        send_cell(
+            notification_receiver,
+            notification_fwd_gas,
+            notification
+        );
+        send_hash_cell_init_carry_inbound(
+            destination_hash,
+            - notification_fwd_gas - fwd_value_sum,
+            begin_cell()
+                .store_uint(opcodes::internal_transfer, 32)
+                .store_uint(query_id, 64)
+                .store_coins(lp_amount)
+                .store_slice(my_address())
+                .store_slice(recipient)
+                .store_coins(0)
+                .store_uint(0, 1)
+                .end_cell(),
+            state_init
+        );
+    }
+}
+
+() withdraw_liquidity(slice sender_address, int query_id, slice in_msg_body) impure inline {
+    int lp_amount = in_msg_body~load_coins();
+    slice from_address = in_msg_body~load_msg_addr();
+    verify_lp_wallet(from_address, sender_address, storage::lp_wallet_code);
+    slice response_address = in_msg_body~load_msg_addr();
+    ifnot (is_address_none(response_address)) {
+        from_address = response_address;
+    }
+
+    int reserve1 = storage::reserve1;
+    int reserve2 = storage::reserve2;
+    int total_supply = storage::total_supply;
+
+    int amount1 = muldiv(lp_amount, reserve1, total_supply);
+    int amount2 = muldiv(lp_amount, reserve2, total_supply);
+    throw_unless(errors::invalid_liquidity, (amount1 > 0) & (amount2 > 0));
+
+    int reserve1_new = reserve1 - amount1;
+    int reserve2_new = reserve2 - amount2;
+    int total_supply_new = total_supply - lp_amount;
+
+    update_reserves(reserve1_new, reserve2_new, total_supply_new);
+    int fwd_fee = send_event(
+        begin_cell()
+            .store_uint(opcodes::liquidity_withdrawal_event, 32)
+            .store_uint(query_id, 64)
+            .store_coins(amount1)
+            .store_coins(amount2)
+            .store_coins(lp_amount)
+            .store_coins(total_supply)
+            .store_coins(total_supply_new)
+            .store_coins(reserve1)
+            .store_coins(reserve2)
+    );
+    send_back(- fwd_fee, query_id, amount1, amount2, from_address, null(), false);
+}
+
+{- GET METHODS -}
+
+(int, int, slice, cell, cell) get_jetton_data() method_id {
+    load_data();
+    (_, int hash) = parse_std_addr(my_address());
+    return (
+        storage::total_supply,
+        -1,
+        storage::factory_address,
+        begin_cell()
+            .store_uint(1, 8)
+            .store_slice("https://lp.swap.coffee/0:")
+            .store_slice(address_to_hex_string(hash))
+            .store_slice(".json")
+            .end_cell(),
+        storage::lp_wallet_code
+    );
+}
+
+slice get_wallet_address(slice owner_address) method_id {
+    load_data();
+    int hash = gen_lp_wallet_state_init_hash(owner_address, my_address(), storage::lp_wallet_code);
+    return construct_address(BASECHAIN, hash);
+}
+
+(int, int) estimate_swap_amount(slice asset, int amount) method_id {
+    load_data();
+    int direction = direction::backward;
+    if (equal_slice_bits(asset, storage::asset1)) {
+        direction = direction::forward;
+    }
+    (int excno, int input_amount, int output_amount, _, _, _) = perform_swap(direction, amount, 0);
+    throw_unless(excno, excno == 0);
+    return (input_amount, output_amount);
+}
+
+(int, int) estimate_liquidity_withdraw_amount(int lp_amount) method_id {
+    load_data();
+    int r1 = storage::reserve1;
+    int r2 = storage::reserve2;
+    int ts = storage::total_supply;
+    int amount1 = muldiv(lp_amount, r1, ts);
+    int amount2 = muldiv(lp_amount, r2, ts);
+    return (amount1, amount2);
+}
+
+(int, int, int, int) estimate_liquidity_deposit_amount(int amount1, int amount2) method_id {
+    load_data();
+    (int excno, int amount1_used, int amount2_used, int lp_amount, int lp_to_lock) = add_liquidity_impl(amount1, amount2);
+    throw_unless(excno, excno == 0);
+    return (amount1_used, amount2_used, lp_amount, lp_to_lock);
+}

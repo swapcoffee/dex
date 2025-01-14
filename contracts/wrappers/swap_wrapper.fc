@@ -1,0 +1,39 @@
+#include "../include/commons.fc";
+#include "../include/constants.fc";
+#include "../include/stdlib.fc";
+#include "../pool/amm/constant_product.fc";
+#include "../pool/include/jetton_based.fc";
+
+() recv_internal(cell in_msg_full, slice in_msg_body) impure {
+    if (in_msg_body.slice_empty?()) {
+        return ();
+    }
+    slice cs = in_msg_full.begin_parse();
+
+    int flags = cs~load_msg_flags();
+    if (flags & 1) { ;; ignore bounced
+        throw(19);
+    }
+
+    load_data();
+
+    slice sender_address = cs~load_msg_addr();
+    force_chain(sender_address);
+    (_, int query_id) = (in_msg_body~load_uint(32), in_msg_body~load_uint(64));
+    swap_internal(sender_address, query_id, in_msg_body, false);
+    return ();
+}
+
+(int) get_dir_from_proof(cell proof, slice previous_asset_hint) method_id {
+    load_data();
+    slice cs = proof.begin_parse();
+    cs~load_msg_addr(); ;; skip factory_addr
+    return get_direction_from_proof(cs, previous_asset_hint);
+}
+
+(int, int, int, int, int) get_perform_swap(int direction, int amount, int min_out_amount) method_id {
+    load_data();
+    (int excno, int a, int b, int c, int d, int f) = perform_swap(direction, amount, min_out_amount);
+    throw_unless(excno, excno == 0);
+    return (a, b, c, d, f);
+}

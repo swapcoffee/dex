@@ -1,0 +1,29 @@
+#include "../include/commons.fc";
+#include "../include/stdlib.fc";
+#include "../pool/amm/curve_fi_stable.fc";
+#include "../pool/include/jetton_based.fc";
+#include "../pool/include/storage.fc";
+
+() recv_internal(cell in_msg_full, slice in_msg_body) impure {
+    return ();
+}
+
+(int, int, int, int) get_add_liq(int total_supply, int amount1, int amount2, int reserve1, int reserve2, cell amm_settings) method_id {
+    storage::total_supply = total_supply;
+    storage::reserve1 = reserve1;
+    storage::reserve2 = reserve2;
+    storage::amm_settings = amm_settings;
+    (int excno, int a, int b, int c, int d) = add_liquidity_impl(amount1, amount2);
+    return (a, b, c, d);
+}
+
+(int) get_swap_stable(int input_amount, int reserve_in, int reserve_out, int direction, cell amm_settings) method_id {
+    storage::amm_settings = amm_settings;
+    storage::reserve1 = reserve_in;
+    storage::reserve2 = reserve_out;
+    (int excno, int a) = swap_impl(direction, input_amount, reserve_in, reserve_out);
+    if(excno != 0) {
+        return -1;
+    }
+    return a;
+}

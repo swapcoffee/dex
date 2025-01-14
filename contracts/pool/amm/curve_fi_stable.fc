@@ -1,0 +1,135 @@
+#include "../include/storage.fc";
+
+int amm_settings_valid?(cell settings) inline {
+    if (cell_null?(settings)) {
+        return false;
+    }
+    slice cs = settings.begin_parse();
+    try {
+        cs~load_uint(16); ;; amplification
+        cs~load_coins(); ;; first asset weight
+        cs~load_coins(); ;; second asset weight
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
+const int stable::N = 2;
+
+(int, int) get_sum_of_reserves(int a, int reserve_in, int reserve_out) inline {
+    if ((reserve_in == 0) | (reserve_out == 0)) {
+        return (errors::amm_failed, 0);
+    }
+    int a_minus_one = a - 1;
+    int pin = stable::N * reserve_in;
+    int pout = stable::N * reserve_out;
+    int s = reserve_in + reserve_out;
+    int d = s;
+    int d_prev = d;
+    repeat (255) {
+        ;; d * d / pin * d / pout
+        int p = muldiv(muldiv(d, d, pin), d, pout);
+        d_prev = d;
+        if ((p == 0) & (d == 0)) {
+            return (errors::amm_failed, 0);
+        }
+        d = muldiv(
+            a * s + stable::N * p,
+            d,
+            a_minus_one * d + (stable::N + 1) * p
+        );
+        if (sub_abs(d, d_prev) <= 1) {
+            return (0, d);
+        }
+    }
+    return (errors::amm_failed, 0);
+}
+
+(int, int) get_new_balance(int a, int input_amount, int d, int input_reserve) inline {
+    ;; when swap happens
+    ;; _y
+    int s = input_amount + input_reserve;
+    int c = 0;
+    c = (d * d) / (s * stable::N) * d / (a * stable::N);
+    int b = s + d / a;
+    int y = d;
+    int y_prev = y;
+    repeat (255) {
+        y_prev = y;
+        ;; same as: y = (y * y + c) / (2 * y + b - d);
+        (y, _) = muladddivmod(y, y, c, 2 * y + b - d);
+        if (sub_abs(y, y_prev) <= 1) {
+            return (0, y);
+        }
+    }
+    return (errors::amm_failed, 0);
+}
+
+(int, int) swap_impl(int direction, int input_amount, int reserve_in, int reserve_out) inline {
+    slice amm_settings_cs = storage::amm_settings.begin_parse();
+    int amplification = amm_settings_cs~load_uint(16);
+    int first_asset_weight = amm_settings_cs~load_coins();
+    int second_asset_weight = amm_settings_cs~load_coins();
+    int reserve1 = storage::reserve1;
+    int reserve2 = storage::reserve2;
+    reserve1 *= first_asset_weight;
+    reserve2 *= second_asset_weight;
+    int input_reserve = reserve1;
+    int output_reserve = reserve2;
+    if (direction == direction::forward) {
+        input_amount *= first_asset_weight;
+    } else {
+        input_amount *= second_asset_weight;
+        second_asset_weight = first_asset_weight;
+        input_reserve = reserve2;
+        output_reserve = reserve1;
+    }
+    int a = amplification * stable::N;
+    (int excno, int sum_of_reserves) = get_sum_of_reserves(a, reserve1, reserve2);
+    ifnot (excno == 0) {
+        return (excno, 0);
+    }
+    (excno, int reserve_out_new) = get_new_balance(a, input_amount, sum_of_reserves, input_reserve);
+    ifnot (excno == 0) {
+        return (excno, 0);
+    }
+    int output_amount = (output_reserve - reserve_out_new - 1) / second_asset_weight; ;; -1 to round down
+    if (output_amount < 0) {
+        return (errors::amm_failed, 0);
+    }
+    return (0, output_amount);
+}
+
+(int, int, int, int, int) add_liquidity_impl(int amount1, int amount2) inline {
+    slice amm_settings_cs = storage::amm_settings.begin_parse();
+    int amplification = amm_settings_cs~load_uint(16);
+    int first_asset_weight = amm_settings_cs~load_coins();
+    int second_asset_weight = amm_settings_cs~load_coins();
+    int amount1_initial = amount1;
+    int amount2_initial = amount2;
+    amount1 *= first_asset_weight;
+    int reserve1 = storage::reserve1;
+    reserve1 *= first_asset_weight;
+    amount2 *= second_asset_weight;
+    int reserve2 = storage::reserve2;
+    reserve2 *= second_asset_weight;
+    int reserve1_new = reserve1 + amount1;
+    int reserve2_new = reserve2 + amount2;
+    int a = amplification * stable::N;
+    (int excno, int sum_new) = get_sum_of_reserves(a, reserve1_new, reserve2_new);
+    ifnot (excno == 0) {
+        return (excno, 0, 0, 0, 0);
+    }
+    if (storage::total_supply == 0) {
+        return (0, amount1_initial, amount2_initial, sum_new, 0);
+    }
+    (excno, int sum_old) = get_sum_of_reserves(a, reserve1, reserve2);
+    ifnot (excno == 0) {
+        return (excno, 0, 0, 0, 0);
+    }
+    ifnot (sum_new > sum_old) {
+        return (errors::invalid_liquidity, 0, 0, 0, 0);
+    }
+    return (0, amount1_initial, amount2_initial, muldiv(sum_new - sum_old, storage::total_supply, sum_old), 0);
+}

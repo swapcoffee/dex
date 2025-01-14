@@ -1,0 +1,237 @@
+#include "include/commons.fc";
+#include "include/constants.fc";
+#include "include/messages.fc";
+#include "include/gas.fc";
+#include "include/stdlib.fc";
+#include "include/throw_safely.fc";
+
+global cell storage::init_code_cell;
+global cell storage::init_data_cell;
+global slice storage::factory_address;
+global slice storage::asset;
+global int storage::asset_id;
+
+() load_data() impure inline {
+    slice data_cs = get_data().begin_parse();
+    storage::init_code_cell = data_cs~load_ref();
+    cell init_data_cell = data_cs~load_ref();
+    storage::init_data_cell = init_data_cell;
+    (storage::factory_address, storage::asset) = parse_vault_init_data(init_data_cell);
+    storage::asset_id = asset_extra_to_id(storage::asset);
+}
+
+int get_extra_currency_amount(cell extra_currencies) inline {
+    (slice cs, _) = extra_currencies.udict_get?(32, storage::asset_id);
+    return cs~load_coins();
+}
+
+() recv_internal(cell in_msg_full, slice in_msg_body) impure {
+    slice cs = in_msg_full.begin_parse();
+
+    int flags = cs~load_msg_flags();
+    if (flags & 1) { ;; ignore bounced
+        return ();
+    }
+
+    load_data();
+
+    slice sender_address = cs~load_msg_addr();
+    force_chain(sender_address);
+    cs~load_msg_addr(); ;; skip dst
+    int msg_value = cs~load_coins();
+    cell extra_currencies = cs~load_dict();
+    cs~load_coins(); ;; skip ihr_fee
+    int fwd_fee = get_original_fwd_fee(BASECHAIN, cs~load_coins());
+    (int opcode, int query_id) = (in_msg_body~load_uint(32), in_msg_body~load_uint(64));
+    if (opcode == opcodes::payout_internal) {
+        slice recipient = in_msg_body~load_msg_addr();
+        int amount = in_msg_body~load_coins();
+        cell notification_data = in_msg_body~load_maybe_ref();
+        slice notification_receiver = recipient;
+        cell notification = null();
+        int notification_fwd_gas = 0;
+
+        ;;return ();
+        ifnot (cell_null?(notification_data)) {
+            slice s = notification_data.begin_parse();
+            notification_receiver = s~load_msg_addr();
+            notification = s~load_ref();
+            notification_fwd_gas = s~load_coins();
+        }
+
+        verify_proof(storage::factory_address, storage::init_code_cell, sender_address, in_msg_body~load_maybe_ref(), true);
+        if (cell_null?(notification)) {
+            send_small_builder_extra_carry_inbound(
+                recipient,
+                0,
+                storage::asset_id,
+                amount,
+                begin_cell()
+                    .store_uint(opcodes::payout, 32)
+                    .store_uint(query_id, 64)
+            );
+        } elseif (is_address_none(notification_receiver) | equal_slice_bits(recipient, notification_receiver)) {
+            send_cell_extra_carry_inbound(
+                recipient,
+                storage::asset_id,
+                amount,
+                notification
+            );
+        } else {
+            send_cell(
+                notification_receiver,
+                notification_fwd_gas,
+                notification
+            );
+            send_small_builder_extra_carry_inbound(
+                recipient,
+                - notification_fwd_gas,
+                storage::asset_id,
+                amount,
+                begin_cell()
+                    .store_uint(opcodes::payout, 32)
+                    .store_uint(query_id, 64)
+            );
+        }
+    } elseif (opcode == opcodes::swap_extra) {
+        int ton_required_for_gas = get_compute_fee(BASECHAIN, gas::swap::computation) + fwd_fee * gas::swap::fwd_steps;
+        if (msg_value < ton_required_for_gas) {
+            throw_safely_extra(
+                errors::not_enough_gas,
+                sender_address,
+                query_id,
+                extra_currencies
+            );
+        }
+        int amount = get_extra_currency_amount(extra_currencies);
+        throw_unless(errors::invalid_balance, amount > 0);
+        int pool_address_hash = in_msg_body~load_uint(256);
+        int min_output_amount = in_msg_body~load_coins();
+        cell next = in_msg_body~load_maybe_ref();
+        cell params = in_msg_body~load_ref();
+
+        send_hash_small_builder_carry_inbound(
+            pool_address_hash,
+            0,
+            begin_cell()
+                .store_uint(opcodes::swap_internal, 32)
+                .store_uint(query_id, 64)
+                .store_coins(amount)
+                .store_uint(0, 1)
+                .store_coins(min_output_amount)
+                .store_maybe_ref(next)
+                .store_ref(params)
+                .store_ref(storage::init_data_cell)
+        );
+    } elseif (opcode == opcodes::deposit_liquidity_extra) {
+        int ton_required_for_gas = get_compute_fee(BASECHAIN, gas::deposit_liquidity::computation) + fwd_fee * gas::deposit_liquidity::fwd_steps;
+        if (msg_value < ton_required_for_gas) {
+            throw_safely_extra(
+                errors::not_enough_gas,
+                sender_address,
+                query_id,
+                extra_currencies
+            );
+        }
+        int amount = get_extra_currency_amount(extra_currencies);
+        throw_unless(errors::invalid_balance, amount > 0);
+        cell liquidity_params = in_msg_body~load_ref();
+        cell pool_params = in_msg_body~load_ref();
+
+        (_, (slice asset1, slice asset2, int amm)) = parse_pool_params(pool_params.begin_parse());
+        if (equal_slice_bits(asset1, asset2)) {
+            throw_safely_extra(
+                errors::same_assets,
+                sender_address,
+                query_id,
+                extra_currencies
+            );
+        }
+        (asset1, asset2, int sorted) = sort_assets(asset1, asset2);
+
+        send_small_builder_carry_inbound(
+            storage::factory_address,
+            0,
+            begin_cell()
+                .store_uint(opcodes::create_liquidity_depository_request, 32)
+                .store_uint(query_id, 64)
+                .store_coins(amount)
+                .store_ref(liquidity_params)
+                .store_ref(
+                    sorted ? begin_cell()
+                        .store_slice(asset1)
+                        .store_slice(asset2)
+                        .store_uint(amm, 3)
+                        .end_cell() : pool_params
+                )
+                .store_ref(storage::init_data_cell)
+        );
+    } elseif (opcode == opcodes::create_pool_extra) {
+        int ton_required_for_gas = get_compute_fee(BASECHAIN, gas::create_pool::computation) + fwd_fee * gas::create_pool::fwd_steps;
+        if (msg_value < ton_required_for_gas) {
+            throw_safely_extra(
+                errors::not_enough_gas,
+                sender_address,
+                query_id,
+                extra_currencies
+            );
+        }
+        int amount = get_extra_currency_amount(extra_currencies);
+        throw_unless(errors::invalid_balance, amount > 0);
+        (slice asset1, slice asset2, int amm) = in_msg_body~parse_pool_params();
+        cell amm_settings = in_msg_body~load_maybe_ref();
+        cell extra_settings = in_msg_body~load_maybe_ref();
+        cell notification_data = in_msg_body~load_maybe_ref();
+
+        if (equal_slice_bits(asset1, asset2)) {
+            throw_safely_extra(
+                errors::same_assets,
+                sender_address,
+                query_id,
+                extra_currencies
+            );
+        }
+        (asset1, asset2, _) = sort_assets(asset1, asset2);
+
+        send_small_builder_carry_inbound(
+            storage::factory_address,
+            0,
+            begin_cell()
+                .store_uint(opcodes::create_pool_creator_request, 32)
+                .store_uint(query_id, 64)
+                .store_coins(amount)
+                .store_ref(
+                    begin_cell()
+                        .store_slice(asset1)
+                        .store_slice(asset2)
+                        .store_uint(amm, 3)
+                        .store_maybe_ref(extra_settings)
+                        .store_maybe_ref(notification_data)
+                        .end_cell()
+                )
+                .store_maybe_ref(amm_settings)
+                .store_slice(sender_address)
+                .store_ref(storage::init_data_cell)
+        );
+    } elseif (opcode == opcodes::update_contract_internal) {
+        throw_unless(errors::not_a_factory, equal_slice_bits(storage::factory_address, sender_address));
+        update_contract(query_id, in_msg_body~load_msg_addr(), in_msg_body);
+    } else {
+        throw_safely_extra(
+            errors::unknown_opcode,
+            sender_address,
+            query_id,
+            extra_currencies
+        );
+    }
+    return ();
+}
+
+slice get_asset() method_id {
+    load_data();
+    return storage::asset;
+}
+
+int is_active() method_id {
+    return true;
+}

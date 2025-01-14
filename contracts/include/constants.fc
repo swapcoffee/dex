@@ -1,0 +1,183 @@
+;; volatile$000 = AMM;
+;;   stable$001 = AMM;
+
+;;           none$00 = DepositLiquidityCondition;
+;;    lp_quantity$01 min_lp_amount:Coins = DepositLiquidityCondition;
+;; reserves_ratio$10 denominator:uint16 min_nominator:uint16 max_nominator:uint16 = DepositLiquidityCondition;
+;;        complex$11 min_lp_amount:Coins denominator:uint16 min_nominator:uint16 max_nominator:uint16 = DepositLiquidityCondition;
+
+;; native$00 = Asset;
+;; jetton$01 chain:uint8 hash:uint256 = Asset;
+;;  extra$10 id:uint32 = Asset;
+
+{- OPCODES FORMAT
+format = 0xc0ffeeXY
+X = 0 for incoming ton-based actions
+X = 1 for incoming jetton-based actions
+X = 2 for inter-contract actions
+X = 3 for outgoing actions
+X = 4 for administrative actions
+-}
+
+;; pool_params first:Asset second:Asset amm:AMM = PoolParams;
+    ;; if receiver is none, it equals to tx recipient
+;; pool_creator_params _:PoolParams extra_settings:(Maybe ^Cell) notification_data:(Maybe ^Cell) = PoolCreatorParams;
+;; notification_data_single receiver:MsgAddressInt fwd_gas:Coins payload:^Cell = NotificationDataSingle;
+;; notification_data on_success:(Maybe ^NotificationDataSingle) on_failure:(Maybe ^NotificationDataSingle) = NotificationData;
+;; pool_update_params flags:(## 3) amm_settings:flags.0?^Cell protocol_fee:flags.1?uint16 lp_fee:flags.1?uint16 is_active:flags.2?uint1 = PoolUpdateParams;
+;; swap_params deadline:uint32 recipient:MsgAddressInt referral:MsgAddressInt notification_data:(Maybe ^NotificationData) = SwapParams;
+;; swap_step_params pool_address_hash:uint256 min_output_amount:Coins next:(Maybe ^SwapStepParams) = SwapStepParams;
+;; swap_step_internal_params previous_amount:Coins previous_asset_hint:(Maybe Asset) min_output_amount:Coins next:(Maybe ^SwapStepParams) = SwapStepInternalParams;
+;; swap_generic_fee input_amount:Coins output_amount:Coins = SwapGenericFee;
+;; swap_referral_fee referral:MsgAddressInt input_amount:Coins output_amount:Coins = SwapReferralFee;
+;; swap_fees lp:SwapGenericFee protocol:SwapGenericFee referral:(Maybe ^SwapReferralFee) = SwapFees;
+;; pool_reserves input_reserve:Coins output_reserve:Coins = PoolReserves;
+;; deposit_liquidity_params_trimmed recipient:MsgAddressInt referral:MsgAddressInt deadline:uint32 condition:DepositLiquidityCondition extra_settings:(Maybe ^Cell) notification_data:(Maybe ^NotificationData) = DepositLiquidityParamsTrimmed; ;; 741
+;; deposit_liquidity_params params:^DepositLiquidityParamsTrimmed pool_params:^PoolParams = DepositLiquidityParams;
+;; contract_update code:(Maybe ^Cell) data:(Maybe ^Cell) = ContractUpdate;
+
+;; user -> vault_native
+;; swap_native#c0ffee00 query_id:uint64 amount:Coins _:SwapStepParams params:^SwapParams = SwapNative;
+const int opcodes::swap_native = 0xc0ffee00;
+;; user -> vault_jetton
+;; swap_jetton#c0ffee10 _:SwapStepParams params:^SwapParams = SwapJetton;
+const int opcodes::swap_jetton = 0xc0ffee10;
+;; user -> vault_extra
+;; swap_extra#c0ffee01 query_id:uint64 _:SwapStepParams params:^SwapParams = SwapExtra;
+const int opcodes::swap_extra = 0xc0ffee01;
+;; vault_native/vault_jetton/pool -> pool
+;; swap_internal#c0ffee20 query_id:uint64 _:SwapStepInternalParams params:^SwapParams proof:^Cell = SwapInternal;
+const int opcodes::swap_internal = 0xc0ffee20;
+;; pool -> void
+;; swap_successful_event#c0ffee30 query_id:uint64 input:Asset input_amount:Coins output_amount:Coins reserves:PoolReserves = SwapSuccessfulEvent;
+const int opcodes::swap_successful_event = 0xc0ffee30;
+;; pool -> void
+;; swap_failed_event#c0ffee31 query_id:uint64 input:Asset input_amount:Coins reserves:(Maybe ^PoolReserves) = SwapFailedEvent;
+const int opcodes::swap_failed_event = 0xc0ffee31;
+;; vault_native -> user
+;; payout#c0ffee32 query_id:uint64 = Payout;
+const int opcodes::payout = 0xc0ffee32;
+;; pool -> vault_native/vault_jetton
+;; payout_internal#c0ffee21 query_id:uint64 recipient:MsgAddressInt amount:Coins notification_data:(Maybe ^NotificationDataSingle) proof:(Maybe ^Cell) = PayoutInternal;
+const int opcodes::payout_internal = 0xc0ffee21;
+;; factory -> vault_native/vault_jetton/pool/liquidity_depository/pool_creator
+;; deploy#c0ffee22 code:^Cell data:^Cell action:(Maybe ^Cell) = Deploy;
+const int opcodes::deploy = 0xc0ffee22;
+;; user -> vault_native
+;; 50000 gas, recommended = 0.075 TON
+;; create_pool_native#c0ffee02 query_id:uint64 amount:Coins params:PoolParams amm_settings:(Maybe ^Cell) extra_settings:(Maybe ^Cell) notification_data:(Maybe ^NotificationData) = CreatePoolNative;
+const int opcodes::create_pool_native = 0xc0ffee02;
+;; user -> vault_jetton
+;; create_pool_jetton#c0ffee11 params:PoolParams amm_settings:(Maybe ^Cell) extra_settings:(Maybe ^Cell) notification_data:(Maybe ^NotificationData) = CreatePoolJetton;
+const int opcodes::create_pool_jetton = 0xc0ffee11;
+;; user -> vault_extra
+;; create_pool_extra#c0ffee03 query_id:uint64 params:PoolParams amm_settings:(Maybe ^Cell) extra_settings:(Maybe ^Cell) notification_data:(Maybe ^NotificationData) = CreatePoolExtra;
+const int opcodes::create_pool_extra = 0xc0ffee03;
+;; vault_native/vault_jetton -> factory
+;; create_pool_creator_request#c0ffee23 query_id:uint64 amount:Coins params:^PoolCreatorParams amm_settings:(Maybe ^Cell) recipient:MsgAddressInt proof:^Cell = CreatePoolCreatorRequest;
+const int opcodes::create_pool_creator_request = 0xc0ffee23;
+;; factory -> pool_creator
+;; create_pool_creator_internal#c0ffee24 query_id:uint64 asset:Asset amm:AMM amm_settings:(Maybe ^Cell) amount:Coins recipient:MsgAddressInt extra_settings:(Maybe ^Cell) notification_data:(Maybe ^NotificationData) = CreatePoolCreatorInternal;
+const int opcodes::create_pool_creator_internal = 0xc0ffee24;
+;; pool_creator -> factory
+;; create_pool_request#c0ffee25 query_id:uint64 amount1:Coins amount2:Coins recipient:MsgAddressInt amm_settings:(Maybe ^Cell) extra_settings:(Maybe ^Cell) notification_data:(Maybe ^NotificationData) proof:^Cell = CreatePoolRequest;
+const int opcodes::create_pool_request = 0xc0ffee25;
+;; factory -> pool
+;; create_pool_internal#c0ffee26 query_id:uint64 amount1:Coins amount2:Coins recipient:MsgAddressInt extra_settings:(Maybe ^Cell) notification_data:(Maybe ^NotificationData) = CreatePoolInternal;
+const int opcodes::create_pool_internal = 0xc0ffee26;
+;; user -> vault_native
+;; deposit_liquidity_native#c0ffee04 query_id:uint64 input_amount:Coins params:DepositLiquidityParams = DepositLiquidityNative;
+const int opcodes::deposit_liquidity_native = 0xc0ffee04;
+;; user -> vault_jetton
+;; deposit_liquidity_jetton#c0ffee12 params:DepositLiquidityParams = DepositLiquidityJetton;
+const int opcodes::deposit_liquidity_jetton = 0xc0ffee12;
+;; user -> vault_extra
+;; deposit_liquidity_extra#c0ffee05 query_id:uint64 params:DepositLiquidityParams = DepositLiquidityExtra;
+const int opcodes::deposit_liquidity_extra = 0xc0ffee05;
+;; vault_native/vault_jetton -> factory
+;; create_liquidity_depository_request#c0ffee27 query_id:uint64 amount:Coins params:DepositLiquidityParams proof:^Cell = CreateLiquidityDepositoryRequest;
+const int opcodes::create_liquidity_depository_request = 0xc0ffee27;
+;; factory -> liquidity_repository
+;; create_liquidity_depository_internal#c0ffee28 query_id:uint64 asset:Asset amm:AMM amount:Coins params:^DepositLiquidityParamsTrimmed = CreateLiquidityDepositoryInternal;
+const int opcodes::create_liquidity_depository_internal = 0xc0ffee28;
+;; liquidity_depository -> pool
+;; deposit_liquidity_internal#c0ffee29 query_id:uint64 amount1:Coins amount2:Coins params:^DepositLiquidityParamsTrimmed proof:^Cell = DepositLiquidityInternal;
+const int opcodes::deposit_liquidity_internal = 0xc0ffee29;
+;; pool -> void
+;; deposit_liquidity_successful_event#c0ffee33 query_id:uint64 amount1:Coins amount2:Coins lp_amount:Coins total_supply:PoolReserves reserves:PoolReserves = DepositLiquiditySuccessfulEvent;
+const int opcodes::deposit_liquidity_successful_event = 0xc0ffee33;
+;; pool -> void
+;; deposit_liquidity_failed_event#c0ffee34 query_id:uint64 amount1:Coins amount2:Coins min_lp_amount:Coins total_supply:Coins reserves:PoolReserves = DepositLiquidityFailedEvent;
+const int opcodes::deposit_liquidity_failed_event = 0xc0ffee34;
+;; pool -> void
+;; liquidity_withdrawal_event#c0ffee35 query_id:uint64 amount1:Coins amount2:Coins lp_amount:Coins total_supply:PoolReserves reserves:PoolReserves = LiquidityWithdrawalEvent;
+const int opcodes::liquidity_withdrawal_event = 0xc0ffee35;
+;; user -> factory
+;; 40000 gas, recommended = 0.03 TON
+;; create_vault#c0ffee06 query_id:uint64 asset:Asset = CreateVault;
+const int opcodes::create_vault = 0xc0ffee06;
+;; factory -> vault_jetton
+;; create_vault_internal#c0ffee2a query_id:uint64 = CreateVaultInternal;
+const int opcodes::create_vault_internal = 0xc0ffee2a;
+;; user -> liquidity_depository / pool_creator
+;; withdraw_deposit#c0ffee07 query_id:uint64 = WithdrawDeposit;
+const int opcodes::withdraw_deposit = 0xc0ffee07;
+;; admin -> factory
+;; update_admin#c0ffee40 query_id:uint64 address:MsgAddressInt = UpdateAdmin;
+const int opcodes::update_admin = 0xc0ffee40;
+;; admin -> factory
+;; update_pool#c0ffee41 query_id:uint64 pool_params:PoolParams params:^PoolUpdateParams = UpdatePool;
+const int opcodes::update_pool = 0xc0ffee41;
+;; factory -> pool
+;; update_pool_internal#c0ffee2b query_id:uint64 excesses_receiver:MsgAddressInt params:^PoolUpdateParams = UpdatePoolInternal;
+const int opcodes::update_pool_internal = 0xc0ffee2b;
+;; admin -> factory
+;; activate_vault#c0ffee42 query_id:uint64 asset:Asset wallet:MsgAddressInt = ActivateVault;
+const int opcodes::activate_vault = 0xc0ffee42;
+;; factory -> vault_jetton
+;; activate_vault_internal#c0ffee2c query_id:uint64 wallet:MsgAddressInt = ActivateVaultInternal;
+const int opcodes::activate_vault_internal = 0xc0ffee2c;
+;; withdrawer -> factory
+;; withdraw#c0ffee43 query_id:uint64 asset:Asset amount:Coins receiver:MsgAddressInt = Withdraw;
+const int opcodes::withdraw = 0xc0ffee43;
+;; admin -> factory
+;; update_code_cell#c0ffee44 query_id:uint64 code_cell:^Cell = UpdateCodeCell;
+const int opcodes::update_code_cell = 0xc0ffee44;
+;; admin -> factory
+;; update_contract#c0ffee45 query_id:uint64 contract_address:MsgAddressInt _:ContractUpdate = UpdateContract;
+const int opcodes::update_contract = 0xc0ffee45;
+;; factory -> any contract except init
+;; update_contract_internal#c0ffee2d query_id:uint64 excesses_receiver:MsgAddressInt _:ContractUpdate = UpdateContractInternal;
+const int opcodes::update_contract_internal = 0xc0ffee2d;
+;; admin -> factory
+;; update_withdrawer#c0ffee46 query_id:uint64 address:MsgAddressInt = UpdateWithdrawer;
+const int opcodes::update_withdrawer = 0xc0ffee46;
+
+const int errors::unknown_opcode = 6;
+const int errors::not_enough_gas = 40;
+const int errors::unexpected = 250;
+const int errors::invalid_request = 251;
+const int errors::wrong_sender = 252;
+const int errors::not_a_factory = 253;
+const int errors::not_an_admin = 254;
+const int errors::wrong_chain = 255;
+const int errors::wrong_assets = 256;
+const int errors::same_assets = 257;
+const int errors::wrong_signature = 258;
+const int errors::invalid_balance = 259;
+const int errors::invalid_jetton_master = 260;
+const int errors::unknown_amm = 261;
+const int errors::amm_failed = 262;
+const int errors::invalid_amm_settings = 263;
+const int errors::invalid_liquidity = 264;
+const int errors::invalid_fee = 265;
+const int errors::invalid_condition = 266;
+const int errors::invalid_asset_type = 267;
+const int errors::deadline_exceeded = 268;
+const int errors::slippage_tolerated = 269;
+const int errors::pool_already_exists = 270;
+const int errors::reserves_ratio_failed = 271;
+const int errors::already_active = 272;
+const int errors::not_active = 273;
+
+const int minimum_liquidity = 1000;

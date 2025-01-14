@@ -1,0 +1,192 @@
+#include "storage.fc";
+#include "../../include/commons.fc";
+
+{- UTILITY -}
+
+;; proof contains info about where we came from
+int get_direction_from_proof(slice cs, slice previous_asset_hint) inline {
+    int contract_type = cs~load_uint(2);
+    if (contract_type == contract_type::pool) {
+        slice asset1 = cs~load_asset(); ;; prev pool the lowest token address
+        slice asset2 = cs~load_asset(); ;; prev pool the biggest token address
+        ;; we're currently performing multihop,
+        ;; therefore we came from one of the previous pool assets,
+        ;; at least one of assets must be the same
+        ;; => after performing the swap, we'll get another one
+        if (equal_slice_bits(asset1, storage::asset1)) {
+            if (equal_slice_bits(asset2, storage::asset2)) {
+                if (equal_slice_bits(previous_asset_hint, storage::asset1)) {
+                    return direction::forward;
+                } elseif (equal_slice_bits(previous_asset_hint, storage::asset2)) {
+                    return direction::backward;
+                } else {
+                    throw(errors::wrong_assets);
+                }
+            } else {
+                return direction::forward;
+            }
+        } elseif (equal_slice_bits(asset1, storage::asset2)) {
+            if (equal_slice_bits(asset2, storage::asset1)) {
+                ;; assets must be sorted in the same way on both pools
+                throw(errors::wrong_assets);
+            } else {
+                return direction::backward;
+            }
+        } elseif (equal_slice_bits(asset2, storage::asset1)) {
+            ;; this condition (and similarly for the next one) shall be enough, because
+            ;; there's no cycle due to proof validation
+            return direction::forward;
+        } elseif (equal_slice_bits(asset2, storage::asset2)) {
+            return direction::backward;
+        } else {
+            throw(errors::wrong_assets);
+        }
+    } elseif (contract_type == contract_type::vault) {
+        slice asset = cs~load_asset();
+        if (equal_slice_bits(asset, storage::asset1)) {
+            return direction::forward;
+        } elseif (equal_slice_bits(asset, storage::asset2)) {
+            return direction::backward;
+        } else {
+            throw(errors::wrong_assets);
+        }
+    } else {
+        throw(errors::wrong_sender);
+    }
+    return 0;
+}
+
+() throw_safely_for_swap(int excno, int query_id, slice input_asset, int amount, slice recipient, cell reserves, cell notification_data) impure inline_ref {
+    int fwd_fee = send_event(
+        begin_cell()
+            .store_uint(opcodes::swap_failed_event, 32)
+            .store_uint(query_id, 64)
+            .store_slice(input_asset)
+            .store_coins(amount)
+            .store_maybe_ref(reserves)
+    );
+    send_hash_small_builder_carry_inbound(
+        calculate_vault_address_hash(
+            storage::factory_address,
+            storage::init_code_cell,
+            input_asset
+        ),
+        - fwd_fee - get_compute_fee(BASECHAIN, 102), ;; COMMIT (26) + THROWANY (76)
+        build_payout_internal_body(query_id, recipient, amount, notification_data, storage::init_data_cell)
+    );
+    commit();
+    throw(excno);
+}
+
+() send_back(int balance_decrement, int query_id, int amount1, int amount2, slice recipient, cell notification_data, int self_destroy) impure inline_ref {
+    cell notification_data_single = null();
+    ifnot (cell_null?(notification_data)) {
+        slice notification_data_cs = notification_data.begin_parse();
+        notification_data_cs~load_maybe_ref(); ;; on_success
+        notification_data_single = notification_data_cs~load_maybe_ref(); ;; on_failure
+    }
+    int vault1_hash = calculate_vault_address_hash(
+        storage::factory_address,
+        storage::init_code_cell,
+        storage::asset1
+    );
+    int vault2_hash = calculate_vault_address_hash(
+        storage::factory_address,
+        storage::init_code_cell,
+        storage::asset2
+    );
+    int value = get_incoming_value() - get_storage_fees() - balance_decrement;
+    int half = value / 2 - 1;
+    value -= send_hash_builder(
+        vault1_hash,
+        half,
+        build_payout_internal_body(query_id, recipient, amount1, notification_data_single, storage::init_data_cell),
+        SEND_MODE_REGULAR
+    ) + half;
+    if (self_destroy) {
+        send_hash_builder(
+            vault2_hash,
+            0,
+            build_payout_internal_body(query_id, recipient, amount2, notification_data_single, storage::init_data_cell),
+            SEND_MODE_SELF_DESTROY
+        );
+    } else {
+        builder body = build_payout_internal_body(query_id, recipient, amount2, notification_data_single, storage::init_data_cell);
+        value -= get_compute_fee(BASECHAIN, 877 + 526 + 80 + gas_consumed());
+        send_hash_small_builder(vault2_hash, value, body);
+    }
+}
+
+() throw_safely_for_liquidity(int excno, int query_id, int amount1, int amount2, slice recipient, int min_lp_amount, cell notification_data, int self_destroy) impure inline_ref {
+    int fwd_fee = send_event(
+        begin_cell()
+            .store_uint(opcodes::deposit_liquidity_failed_event, 32)
+            .store_uint(query_id, 64)
+            .store_coins(amount1)
+            .store_coins(amount2)
+            .store_coins(min_lp_amount)
+            .store_coins(storage::total_supply)
+            .store_coins(storage::reserve1)
+            .store_coins(storage::reserve2)
+    );
+    ;; 26 (COMMIT) + 18 (XCHG) + 84 (THROW) + RET (8) = 136
+    int balance_decrement = fwd_fee + get_compute_fee(BASECHAIN, 136);
+    send_back(balance_decrement, query_id, amount1, amount2, recipient, notification_data, self_destroy);
+    commit();
+    throw(excno);
+}
+
+{- ADMINISTRATIVE -}
+
+() update_pool(slice sender_address, int query_id, slice in_msg_body) impure inline {
+    throw_unless(errors::not_a_factory, equal_slice_bits(storage::factory_address, sender_address));
+    slice excesses_receiver = in_msg_body~load_msg_addr();
+    slice params_cs = in_msg_body~load_ref().begin_parse();
+    int flags = params_cs~load_uint(3);
+    cell amm_settings = storage::amm_settings;
+    if (flags & 1) {
+        amm_settings = params_cs~load_ref();
+    }
+    int protocol_fee = storage::protocol_fee;
+    int lp_fee = storage::lp_fee;
+    if (flags & 2) {
+        protocol_fee = params_cs~load_uint(16);
+        lp_fee = params_cs~load_uint(16);
+        throw_unless(errors::invalid_fee, (protocol_fee <= fee::max_nominator) | (lp_fee <= fee::max_nominator));
+    }
+    int is_active = storage::is_active;
+    if (flags & 4) {
+        is_active = params_cs~load_bool();
+        throw_if(errors::already_active, is_active & storage::is_active);
+        throw_unless(errors::not_active, is_active | storage::is_active);
+    }
+    update_settings(amm_settings, protocol_fee, lp_fee, is_active);
+    ifnot (is_address_none(excesses_receiver)) {
+        send_small_builder_carry_inbound(
+            excesses_receiver,
+            0,
+            begin_cell()
+                .store_uint(opcodes::excesses, 32)
+                .store_uint(query_id, 64)
+        );
+    }
+}
+
+{- GET METHODS -}
+
+(int, slice, slice, int, int, int, int, int, cell, int, int) get_pool_data() method_id {
+    load_data();
+    return (
+        pool_code_version,
+        storage::asset1,
+        storage::asset2,
+        storage::amm,
+        storage::is_active,
+        storage::reserve1,
+        storage::reserve2,
+        storage::total_supply,
+        storage::amm_settings,
+        storage::protocol_fee,
+        storage::lp_fee
+    );
+}

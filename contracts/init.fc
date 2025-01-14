@@ -1,0 +1,25 @@
+#include "include/stdlib.fc";
+#include "include/constants.fc";
+
+() recv_internal(cell in_msg_full, slice in_msg_body) impure {
+    slice cs = in_msg_full.begin_parse();
+    cs~skip_bits(4);
+    slice sender_address = cs~load_msg_addr();
+    cs = get_data().begin_parse();
+    slice factory_address = cs~load_msg_addr();
+
+    throw_unless(errors::not_a_factory, equal_slice_bits(factory_address, sender_address));
+    throw_unless(errors::unknown_opcode, in_msg_body~load_uint(32) == opcodes::deploy);
+    in_msg_body~load_uint(64);
+
+    cell code = in_msg_body~load_ref();
+    cell data = in_msg_body~load_ref();
+    cell action = in_msg_body~load_maybe_ref();
+    set_data(data);
+    set_code(code);
+    set_c3(code.begin_parse().bless());
+
+    ifnot (cell_null?(action)) {
+        recv_internal(in_msg_full, action.begin_parse());
+    }
+}
