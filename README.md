@@ -1,4 +1,4 @@
-# ton-dex-contracts
+# coffee-dex
 
 ## Project structure
 

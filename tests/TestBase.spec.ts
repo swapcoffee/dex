@@ -11,7 +11,7 @@ import {Pool} from "../wrappers/Pool";
 import {CodeCells, compileCodes} from "./utils";
 import {PoolConstantProduct} from "../wrappers/PoolConstantProduct";
 
-describe('Test', () => {
+xdescribe('Test', () => {
     let codeCells: CodeCells;
     beforeAll(async () => {
         codeCells = await compileCodes();

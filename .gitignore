@@ -2,6 +2,7 @@ node_modules
 temp
 build
 dist
+coverage
 .DS_Store
 
 # VS Code

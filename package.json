@@ -1,10 +1,10 @@
 {
-    "name": "ton-dex-contracts",
-    "version": "0.0.1",
+    "name": "coffee-dex",
+    "version": "1.0.0",
     "scripts": {
         "start": "blueprint run",
         "build": "blueprint build",
-        "test": "jest --verbose"
+        "test": "jest"
     },
     "devDependencies": {
         "@ton/blueprint": "^0.24.0",

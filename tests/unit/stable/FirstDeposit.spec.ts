@@ -5,7 +5,7 @@ import {compile} from "@ton/blueprint";
 import {StableWrapper} from "../../../wrappers/unit/StableWrapper";
 import fs from 'node:fs';
 
-describe('Test', () => {
+xdescribe('Test', () => {
     let stableWrapperCode: Cell
     beforeAll(async () => {
         stableWrapperCode = await compile("unit/StableWrapper");

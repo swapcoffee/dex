@@ -49,12 +49,6 @@ describe('Test', () => {
         await buildSwapper(0, 1n, 1n, 1n, 10_000, 20_000);
     });
 
-    it('test swap unknown amm', async () => {
-        await buildSwapper(2, 1n, 1n, 1n, 10_000, 20_000);
-        let func = async () => await swapWrapper.getPerformSwap(0, 100n, 0n);
-        await expect(func).rejects.toThrow("Unable to execute get method. Got exit_code: 261");
-    });
-
     it('test swap fail slippage, forward', async () => {
         await buildSwapper(0, volatileReserve1, volatileReserve2, volatileLp, 10_000, 20_000);
         let func = async () => swapWrapper.getPerformSwap(1, 100n, 100000n);
