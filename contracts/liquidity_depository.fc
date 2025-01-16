@@ -1,7 +1,6 @@
 #include "include/commons.fc";
 #include "include/constants.fc";
 #include "include/messages.fc";
-#include "include/stdlib.fc";
 
 global cell storage::init_code_cell;
 global cell storage::init_data_cell;
