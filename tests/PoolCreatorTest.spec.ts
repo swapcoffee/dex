@@ -5,10 +5,12 @@ import {Factory} from "../wrappers/Factory";
 import {VaultNative} from "../wrappers/VaultNative";
 import {JettonMaster, JettonWallet} from "../wrappers/Jetton";
 import {VaultJetton} from "../wrappers/VaultJetton";
-import {AMM, PoolParams} from "../wrappers/types";
+import { AMM, DepositLiquidityParams, DepositLiquidityParamsTrimmed, PoolParams } from '../wrappers/types';
 import {CodeCells, compileCodes, deployJetton} from "./utils";
 import {AccountStateActive} from "@ton/core/src/types/AccountState";
 import {PoolCreator} from "../wrappers/PoolCreator";
+import { LiquidityDepository } from '../wrappers/LiquidityDepository';
+import { printTransactions } from '../wrappers/utils';
 
 describe('Test', () => {
     let codeCells: CodeCells;
@@ -532,4 +534,127 @@ describe('Test', () => {
             success: false
         });
     });
+
+    test.each(['native', 'jetton'])('double deposit %s, then withdraw', async (type) => {
+        const sender = admin
+        let sendTx, vault
+        if (type === 'native') {
+            sendTx = async() => nativeVault.sendCreatePoolNative(
+                sender.getSender(),
+                toNano(11),
+                toNano(10),
+                PoolParams.fromAddress(null, jettonMaster1.address, AMM.ConstantProduct),
+                null,
+                null
+            )
+            vault = nativeVault
+        } else {
+            const senderAddressJettonWallet1 = blockchain.openContract(
+                JettonWallet.createFromAddress(await jettonMaster1.getWalletAddress(sender.address))
+            )
+            sendTx = async() => senderAddressJettonWallet1.sendCreatePoolJetton(
+                sender.getSender(),
+                toNano(1),
+                jettonVault1.address,
+                toNano(10),
+                PoolParams.fromAddress(null, jettonMaster1.address, AMM.ConstantProduct),
+                null,
+                null
+            )
+            vault = jettonVault1
+        }
+        await sendTx()
+        const depository = blockchain.openContract(
+            PoolCreator.createFromAddress(
+                await factory.getPoolCreatorAddress(sender.address, null, jettonMaster1.address, AMM.ConstantProduct)
+            )
+        )
+        const depositTxs = await sendTx()
+        expect(depositTxs.transactions).toHaveTransaction(
+            {
+                from: vault.address,
+                to: factory.address,
+                exitCode: 0,
+                success: true
+            }
+        )
+        expect(depositTxs.transactions).toHaveTransaction(
+            {
+                from: factory.address,
+                to: depository.address,
+                exitCode: 264,
+                success: true
+            }
+        )
+        expect(depositTxs.transactions).toHaveTransaction(
+            {
+                from: depository.address,
+                to: vault.address,
+                exitCode: 0,
+                success: true
+            }
+        )
+        const withdrawTxs = await depository.sendWithdrawFunds(sender.getSender(), toNano(1))
+        expect(withdrawTxs.transactions).toHaveTransaction(
+            {
+                from: depository.address,
+                to: vault.address,
+                exitCode: 0,
+                success: true
+            }
+        )
+        if (type === 'native') {
+            expect(depositTxs.transactions).toHaveTransaction(
+                {
+                    from: vault.address,
+                    to: sender.address,
+                    exitCode: 0,
+                    success: true
+                }
+            )
+            expect(withdrawTxs.transactions).toHaveTransaction(
+                {
+                    from: vault.address,
+                    to: sender.address,
+                    exitCode: 0,
+                    success: true
+                }
+            )
+        } else {
+            const vaultWalletAddress = await jettonMaster1.getWalletAddress(vault.address)
+            const senderWalletAddress = await jettonMaster1.getWalletAddress(sender.address)
+            expect(depositTxs.transactions).toHaveTransaction(
+                {
+                    from: vault.address,
+                    to: vaultWalletAddress,
+                    exitCode: 0,
+                    success: true
+                }
+            )
+            expect(depositTxs.transactions).toHaveTransaction(
+                {
+                    from: vaultWalletAddress,
+                    to: senderWalletAddress,
+                    exitCode: 0,
+                    success: true
+                }
+            )
+            expect(withdrawTxs.transactions).toHaveTransaction(
+                {
+                    from: vault.address,
+                    to: vaultWalletAddress,
+                    exitCode: 0,
+                    success: true
+                }
+            )
+            expect(withdrawTxs.transactions).toHaveTransaction(
+                {
+                    from: vaultWalletAddress,
+                    to: senderWalletAddress,
+                    exitCode: 0,
+                    success: true
+                }
+            )
+        }
+    })
 });

@@ -403,4 +403,133 @@ describe('Test', () => {
             }
         );
     });
+
+    test.each(['native', 'jetton'])('double deposit %s, then withdraw', async (type) => {
+        const sender = user
+        const params = new DepositLiquidityParams(
+            new DepositLiquidityParamsTrimmed(
+                BigInt((1 << 30) * 2),
+                0n,
+                sender.address,
+                null,
+                null
+            ),
+            PoolParams.fromAddress(null, jettonMaster1.address, AMM.ConstantProduct)
+        )
+        let sendTx, vault
+        if (type === 'native') {
+            sendTx = async () => nativeVault.sendDepositLiquidityNative(
+                sender.getSender(),
+                toNano(11),
+                toNano(10),
+                params
+            )
+            vault = nativeVault
+        } else {
+            const senderAddressJettonWallet1 = blockchain.openContract(
+                JettonWallet.createFromAddress(await jettonMaster1.getWalletAddress(sender.address))
+            )
+            sendTx = async() => senderAddressJettonWallet1.sendDepositLiquidityJetton(
+                sender.getSender(),
+                toNano(1),
+                jettonVault1.address,
+                toNano(10),
+                params
+            )
+            vault = jettonVault1
+        }
+        await sendTx()
+        const depository = blockchain.openContract(
+            LiquidityDepository.createFromAddress(
+                await factory.getLiquidityDepositoryAddress(sender.address, null, jettonMaster1.address, AMM.ConstantProduct)
+            )
+        )
+        const depositTxs = await sendTx()
+        expect(depositTxs.transactions).toHaveTransaction(
+            {
+                from: vault.address,
+                to: factory.address,
+                exitCode: 0,
+                success: true
+            }
+        )
+        expect(depositTxs.transactions).toHaveTransaction(
+            {
+                from: factory.address,
+                to: depository.address,
+                exitCode: 264,
+                success: true
+            }
+        )
+        expect(depositTxs.transactions).toHaveTransaction(
+            {
+                from: depository.address,
+                to: vault.address,
+                exitCode: 0,
+                success: true
+            }
+        )
+        const withdrawTxs = await depository.sendWithdrawFunds(sender.getSender(), toNano(1))
+        expect(withdrawTxs.transactions).toHaveTransaction(
+            {
+                from: depository.address,
+                to: vault.address,
+                exitCode: 0,
+                success: true
+            }
+        )
+        if (type === 'native') {
+            expect(depositTxs.transactions).toHaveTransaction(
+                {
+                    from: vault.address,
+                    to: sender.address,
+                    exitCode: 0,
+                    success: true
+                }
+            )
+            expect(withdrawTxs.transactions).toHaveTransaction(
+                {
+                    from: vault.address,
+                    to: sender.address,
+                    exitCode: 0,
+                    success: true
+                }
+            )
+        } else {
+            const vaultWalletAddress = await jettonMaster1.getWalletAddress(vault.address)
+            const senderWalletAddress = await jettonMaster1.getWalletAddress(sender.address)
+            expect(depositTxs.transactions).toHaveTransaction(
+                {
+                    from: vault.address,
+                    to: vaultWalletAddress,
+                    exitCode: 0,
+                    success: true
+                }
+            )
+            expect(depositTxs.transactions).toHaveTransaction(
+                {
+                    from: vaultWalletAddress,
+                    to: senderWalletAddress,
+                    exitCode: 0,
+                    success: true
+                }
+            )
+            expect(withdrawTxs.transactions).toHaveTransaction(
+                {
+                    from: vault.address,
+                    to: vaultWalletAddress,
+                    exitCode: 0,
+                    success: true
+                }
+            )
+            expect(withdrawTxs.transactions).toHaveTransaction(
+                {
+                    from: vaultWalletAddress,
+                    to: senderWalletAddress,
+                    exitCode: 0,
+                    success: true
+                }
+            )
+        }
+    })
 });

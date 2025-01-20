@@ -53,6 +53,26 @@ global int storage::amount2;
     );
 }
 
+() payout(int query_id, slice sender_address, slice asset, int amount, int mode) impure inline {
+    send_hash_builder(
+        calculate_vault_address_hash(
+            storage::factory_address,
+            storage::init_code_cell,
+            asset
+        ),
+        0,
+        begin_cell()
+            .store_uint(opcodes::payout_internal, 32)
+            .store_uint(query_id, 64)
+            .store_slice(sender_address)
+            .store_coins(amount)
+            .store_uint(0, 1)
+            .store_uint(1, 1)
+            .store_ref(storage::init_data_cell),
+        mode
+    );
+}
+
 () recv_internal(cell in_msg_full, slice in_msg_body) impure {
     slice cs = in_msg_full.begin_parse();
     cs~skip_bits(4);
@@ -73,20 +93,30 @@ global int storage::amount2;
         throw_unless(errors::wrong_sender, equal_slice_bits(storage::owner_address, recipient));
 
         if (equal_slice_bits(asset, storage::asset1)) {
-            throw_unless(errors::invalid_liquidity, storage::amount1 == 0);
-            storage::amount1 = amount;
-            if (storage::amount2 == 0) {
-                update_data();
+            if (storage::amount1 == 0) {
+                storage::amount1 = amount;
+                if (storage::amount2 == 0) {
+                    update_data();
+                } else {
+                    continue(query_id, params);
+                }
             } else {
-                continue(query_id, params);
+                payout(query_id, recipient, asset, amount, SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
+                commit();
+                throw(errors::invalid_liquidity);
             }
         } elseif (equal_slice_bits(asset, storage::asset2)) {
-            throw_unless(errors::invalid_liquidity, storage::amount2 == 0);
-            storage::amount2 = amount;
-            if (storage::amount1 == 0) {
-                update_data();
+            if (storage::amount2 == 0) {
+                storage::amount2 = amount;
+                if (storage::amount1 == 0) {
+                    update_data();
+                } else {
+                    continue(query_id, params);
+                }
             } else {
-                continue(query_id, params);
+                payout(query_id, recipient, asset, amount, SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
+                commit();
+                throw(errors::invalid_liquidity);
             }
         } else {
             throw(errors::invalid_request);
@@ -105,23 +135,7 @@ global int storage::amount2;
             amount = storage::amount2;
             asset = storage::asset2;
         }
-        send_hash_builder(
-            calculate_vault_address_hash(
-                storage::factory_address,
-                storage::init_code_cell,
-                asset
-            ),
-            0,
-            begin_cell()
-                .store_uint(opcodes::payout_internal, 32)
-                .store_uint(query_id, 64)
-                .store_slice(sender_address)
-                .store_coins(amount)
-                .store_uint(0, 1)
-                .store_uint(1, 1)
-                .store_ref(storage::init_data_cell),
-            SEND_MODE_SELF_DESTROY
-        );
+        payout(query_id, sender_address, asset, amount, SEND_MODE_SELF_DESTROY);
     } elseif (opcode == opcodes::update_contract_internal) {
         throw_unless(errors::not_a_factory, equal_slice_bits(storage::factory_address, sender_address));
         update_contract(query_id, in_msg_body~load_msg_addr(), in_msg_body);
