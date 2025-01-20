@@ -98,7 +98,7 @@ global int storage::amount2;
                     continue(query_id, recipient, amm_settings, extra_settings, notification_data);
                 }
             } else {
-                payout(query_id, sender_address, asset, amount, SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
+                payout(query_id, recipient, asset, amount, SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
                 commit();
                 throw(errors::invalid_liquidity);
             }
@@ -111,7 +111,7 @@ global int storage::amount2;
                     continue(query_id, recipient, amm_settings, extra_settings, notification_data);
                 }
             } else {
-                payout(query_id, sender_address, asset, amount, SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
+                payout(query_id, recipient, asset, amount, SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
                 commit();
                 throw(errors::invalid_liquidity);
             }
