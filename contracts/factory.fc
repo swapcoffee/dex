@@ -88,7 +88,9 @@ global cell storage::pool_creator_code_cell;
 
         cell amm_settings = in_msg_body~load_maybe_ref();
         slice recipient = in_msg_body~load_msg_addr();
-        throw_unless(errors::not_an_admin, (amm == amm::constant_product) | equal_slice_bits(recipient, storage::admin_address)); ;; only admin can create non-constant product pools
+        slice tx_initiator = in_msg_body~load_msg_addr();
+
+        throw_unless(errors::not_an_admin, (amm == amm::constant_product) | equal_slice_bits(tx_initiator, storage::admin_address)); ;; only admin can create non-constant product pools
         cell proof = in_msg_body~load_ref();
 
         slice proof_cs = verify_proof(my_address(), storage::init_code_cell, sender_address, proof, false);

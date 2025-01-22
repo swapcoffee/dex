@@ -112,6 +112,7 @@ describe('Test', () => {
                 admin.getSender(),
                 toNano(1) + first_asset,
                 first_asset,
+                admin.address,
                 new PoolParams(
                     AssetNative.INSTANCE,
                     AssetJetton.fromAddress(jettonMaster1.address),
@@ -129,6 +130,7 @@ describe('Test', () => {
                 toNano(1),
                 vaultJetton1.address,
                 second_asset,
+                admin.address,
                 new PoolParams(
                     AssetNative.INSTANCE,
                     AssetJetton.fromAddress(jettonMaster1.address),

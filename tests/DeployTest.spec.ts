@@ -133,6 +133,7 @@ describe('Test', () => {
             toNano(1.0),
             vaultJetton.address,
             toNano(10.0),
+            admin.address,
             PoolParams.fromAddress(jettonMaster.address, null, AMM.CurveFiStable),
             ammSettings,
             null
@@ -158,6 +159,7 @@ describe('Test', () => {
             admin.getSender(),
             toNano(5.0),
             toNano(4.0),
+            admin.address,
             PoolParams.fromAddress(null, jettonMaster.address, AMM.CurveFiStable),
             ammSettings,
             null
@@ -206,6 +208,7 @@ describe('Test', () => {
             toNano(1.0),
             vaultJetton1.address,
             toNano(10.0),
+            admin.address,
             PoolParams.fromAddress(jettonMaster.address, jettonMaster2.address, AMM.ConstantProduct),
             null,
             null
@@ -232,6 +235,7 @@ describe('Test', () => {
             toNano(1.0),
             vaultJetton2.address,
             toNano(10.0),
+            admin.address,
             PoolParams.fromAddress(jettonMaster.address, jettonMaster2.address, AMM.ConstantProduct),
             null,
             null

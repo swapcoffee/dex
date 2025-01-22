@@ -81,6 +81,7 @@ xdescribe('Test', () => {
             admin.getSender(),
             toNano(5.0),
             toNano(4.0),
+            admin.address,
             new PoolParams(AssetNative.INSTANCE, AssetJetton.fromAddress(jettonMaster.address), AMM.ConstantProduct),
             null,
             null
@@ -94,6 +95,7 @@ xdescribe('Test', () => {
             toNano(1.0),
             vaultJetton.address,
             toNano(10.0),
+            admin.address,
             new PoolParams(AssetNative.INSTANCE, AssetJetton.fromAddress(jettonMaster.address), AMM.ConstantProduct),
             null,
             null

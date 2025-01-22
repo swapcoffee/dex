@@ -39,6 +39,7 @@ describe('Test', () => {
                 sender.getSender(),
                 amount + toNano(1),
                 amount,
+                sender.address,
                 param,
                 null,
                 notification
@@ -62,6 +63,7 @@ describe('Test', () => {
                 toNano(1),
                 vault.address,
                 amount,
+                sender.address,
                 param,
                 null,
                 notification
@@ -70,6 +72,7 @@ describe('Test', () => {
             return await (vault as SandboxContract<VaultExtra>).sendCreatePoolExtra(
                 sender.getSender(),
                 toNano(1),
+                sender.address,
                 param,
                 null,
                 notification

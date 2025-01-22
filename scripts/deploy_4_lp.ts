@@ -57,6 +57,7 @@ async function sendMessage(provider: NetworkProvider,
                 provider.sender(),
                 toNano('0.1') + asset1,
                 asset1,
+                provider.sender().address,
                 new PoolParams(Asset.fromAny(token1), Asset.fromAny(token2), amm),
                 ammSettings,
                 null
@@ -90,6 +91,7 @@ async function sendMessage(provider: NetworkProvider,
         let vault = await factory.getVaultAddress(token1)
         if (depositOrProvide == DepositOrProvide.CREATE_LP) {
             await wallet.sendCreatePoolJetton(provider.sender(), toNano('0.1'), vault, asset1,
+                provider.sender().address,
                 new PoolParams(Asset.fromAny(token1), Asset.fromAny(token2), amm),
                 ammSettings,
                 null)
