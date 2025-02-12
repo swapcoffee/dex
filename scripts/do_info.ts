@@ -97,14 +97,7 @@ async function sendMessage(provider: NetworkProvider,
 
 export async function run(provider: NetworkProvider) {
     let compiled = await compileCodes();
-    initCode = compiled.init;
-    vaultNativeCode = compiled.vaultNativeCode;
-    vaultJettonCode = compiled.vaultJettonCode;
-    vaultExtraCode = compiled.vaultExtraCode;
-    poolCode = compiled.poolCode;
-    liquidityDepositoryCode = compiled.liquidityDepositoryCode;
-    poolCreatorCode = compiled.poolCreatorCode;
-    factoryCode = compiled.factoryCode;
+
 
     let deployer = provider.sender().address as Address;
     console.log("admin:", deployer);
@@ -128,14 +121,4 @@ export async function run(provider: NetworkProvider) {
 
     let pool = await factory.getPoolAddress(null, masters[0].address, AMM.CurveFiStable)
     console.log(pool.toRawString())
-    console.log(
-        await provider.open(
-            Pool.createFromAddress(pool)
-        ).getPoolData()
-    )
-    console.log(
-        await provider.open(
-            Pool.createFromAddress(pool)
-        ).getJettonData()
-    )
 }

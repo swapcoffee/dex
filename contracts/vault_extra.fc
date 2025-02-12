@@ -178,7 +178,11 @@ int get_extra_currency_amount(cell extra_currencies) inline {
         }
         int amount = get_extra_currency_amount(extra_currencies);
         throw_unless(errors::invalid_balance, amount > 0);
-        (slice asset1, slice asset2, int amm) = in_msg_body~parse_pool_params();
+
+        slice receiver = in_msg_body~load_msg_addr();
+        slice pool_param = in_msg_body~load_ref().begin_parse();
+        (slice asset1, slice asset2, int amm) = pool_param~parse_pool_params();
+
         cell amm_settings = in_msg_body~load_maybe_ref();
         cell extra_settings = in_msg_body~load_maybe_ref();
         cell notification_data = in_msg_body~load_maybe_ref();
@@ -193,7 +197,7 @@ int get_extra_currency_amount(cell extra_currencies) inline {
         }
         (asset1, asset2, _) = sort_assets(asset1, asset2);
 
-        send_small_builder_carry_inbound(
+        send_cell_carry_inbound(
             storage::factory_address,
             0,
             begin_cell()
@@ -210,8 +214,10 @@ int get_extra_currency_amount(cell extra_currencies) inline {
                         .end_cell()
                 )
                 .store_maybe_ref(amm_settings)
+                .store_slice(receiver)
                 .store_slice(sender_address)
                 .store_ref(storage::init_data_cell)
+                .end_cell()
         );
     } elseif (opcode == opcodes::update_contract_internal) {
         throw_unless(errors::not_a_factory, equal_slice_bits(storage::factory_address, sender_address));

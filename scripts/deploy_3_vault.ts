@@ -20,35 +20,12 @@ export const NATIVE_ADDRESS = Address.parse("EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 
 export async function run(provider: NetworkProvider) {
     let compiled = await compileCodes();
-    initCode = compiled.init;
-    vaultNativeCode = compiled.vaultNativeCode;
-    vaultJettonCode = compiled.vaultJettonCode;
-    vaultExtraCode = compiled.vaultExtraCode;
-    poolCode = compiled.poolCode;
-    liquidityDepositoryCode = compiled.liquidityDepositoryCode;
-    poolCreatorCode = compiled.poolCreatorCode;
-    factoryCode = compiled.factoryCode;
+
 
     let deployer = provider.sender().address as Address;
     console.log("admin:", deployer);
 
-    let factory = provider.open(
-        Factory.createFromConfig(
-            {
-                admin: deployer,
-                withdrawer: deployer,
-                lpWalletCode: lpWalletCode,
-                initCode: initCode,
-                vaultNativeCode: vaultNativeCode,
-                vaultJettonCode: vaultJettonCode,
-                vaultExtraCode: vaultExtraCode,
-                poolCode: poolCode,
-                liquidityDepositoryCode: liquidityDepositoryCode,
-                poolCreatorCode: poolCreatorCode
-            },
-            factoryCode
-        )
-    );
+    let factory = provider.open(Factory.createFromData(deployer, compiled, deployer));
     const ui = provider.ui();
     console.log('Factory address:', factory.address.toRawString());
 

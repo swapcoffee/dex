@@ -1,190 +1,170 @@
-import {Address, beginCell, Cell, OpenedContract, toNano} from '@ton/core';
-import {compile, NetworkProvider, UIProvider} from '@ton/blueprint';
-import {Blockchain, SandboxContract, TreasuryContract} from "@ton/sandbox";
-import {JettonMaster, JettonWallet} from "../wrappers/Jetton";
-import {getTransactionAccount} from "../wrappers/utils";
-import {waitSeqNoChange} from "./utils";
-import {compileCodes, lpWalletCode} from "../tests/utils";
-import {Factory} from "../wrappers/Factory";
-import {AMM, Asset, DepositLiquidityParams, DepositLiquidityParamsTrimmed, PoolParams} from "../wrappers/types";
-import {VaultNative} from "../wrappers/VaultNative";
-
-let initCode: Cell;
-let vaultNativeCode: Cell;
-let vaultJettonCode: Cell;
-let vaultExtraCode: Cell;
-let poolCode: Cell;
-let liquidityDepositoryCode: Cell;
-let poolCreatorCode: Cell;
-let factoryCode: Cell;
+import { Address, beginCell, Cell, OpenedContract, toNano } from '@ton/core';
+import { compile, NetworkProvider, UIProvider } from '@ton/blueprint';
+import { Blockchain, SandboxContract, TreasuryContract } from '@ton/sandbox';
+import { JettonMaster, JettonWallet } from '../wrappers/Jetton';
+import { getTransactionAccount } from '../wrappers/utils';
+import { waitSeqNoChange } from './utils';
+import { compileCodes, lpWalletCode } from '../tests/utils';
+import { Factory } from '../wrappers/Factory';
+import { AMM, Asset, DepositLiquidityParams, DepositLiquidityParamsTrimmed, PoolParams } from '../wrappers/types';
+import { VaultNative } from '../wrappers/VaultNative';
 
 enum DepositOrProvide {
     CREATE_LP,
-    PROVIDE_LP
+    PROVIDE_LP,
 }
 
-export const NATIVE_ADDRESS = Address.parse("EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c");
+export const NATIVE_ADDRESS = Address.parse('EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c');
 
 function addressToAsset(address: Address) {
     if (address.toRawString() == NATIVE_ADDRESS.toRawString()) {
-        return null
+        return null;
     }
-    return address
+    return address;
 }
 
 export async function parseInteger(ui: UIProvider, text: string) {
     while (true) {
         try {
-            return Number.parseInt(await ui.input(text))
+            return Number.parseInt(await ui.input(text));
         } catch (Error) {
-            console.log("Wrong number, try again")
+            console.log('Wrong number, try again');
         }
     }
 }
 
-async function sendMessage(provider: NetworkProvider,
-                           factory: OpenedContract<Factory>,
-                           token1: Address | null,
-                           token2: Address | null,
-                           asset1: bigint,
-                           amm: AMM,
-                           ammSettings: Cell | null,
-                           depositOrProvide: DepositOrProvide) {
+async function sendMessage(
+    provider: NetworkProvider,
+    factory: OpenedContract<Factory>,
+    token1: Address | null,
+    token2: Address | null,
+    asset1: bigint,
+    amm: AMM,
+    ammSettings: Cell | null,
+    depositOrProvide: DepositOrProvide,
+) {
     if (token1 == null) {
-        let vault = provider.open(VaultNative.createFromAddress(await factory.getVaultAddress(token1)))
+        let vault = provider.open(VaultNative.createFromAddress(await factory.getVaultAddress(token1)));
         if (depositOrProvide == DepositOrProvide.CREATE_LP) {
             await vault.sendCreatePoolNative(
                 provider.sender(),
                 toNano('0.1') + asset1,
                 asset1,
+                provider.sender().address,
                 new PoolParams(Asset.fromAny(token1), Asset.fromAny(token2), amm),
                 ammSettings,
-                null
-            )
+                null,
+            );
         } else {
             await vault.sendDepositLiquidityNative(
                 provider.sender(),
                 toNano('0.1') + asset1,
                 asset1,
                 new DepositLiquidityParams(
-                    new DepositLiquidityParamsTrimmed(
-                        BigInt((1 << 30) * 2),
-                        0n,
-                        null,
-                        null,
-                        null
-                    ),
-                    PoolParams.fromAddress(token1, token2, amm)
-                )
-            )
+                    new DepositLiquidityParamsTrimmed(BigInt((1 << 30) * 2), 0n, null, null, null),
+                    PoolParams.fromAddress(token1, token2, amm),
+                ),
+            );
         }
     } else {
         let sender = provider.sender().address as Address;
 
-        let wallet =
-            provider.open(
-                JettonWallet.createFromAddress(
-                    await provider.open(JettonMaster.createFromAddress(token1)).getWalletAddress(sender)
-                )
-            )
-        let vault = await factory.getVaultAddress(token1)
+        let wallet = provider.open(
+            JettonWallet.createFromAddress(
+                await provider.open(JettonMaster.createFromAddress(token1)).getWalletAddress(sender),
+            ),
+        );
+        let vault = await factory.getVaultAddress(token1);
         if (depositOrProvide == DepositOrProvide.CREATE_LP) {
-            await wallet.sendCreatePoolJetton(provider.sender(), toNano('0.1'), vault, asset1,
+            await wallet.sendCreatePoolJetton(
+                provider.sender(),
+                toNano('0.1'),
+                vault,
+                asset1,
+                provider.sender().address,
                 new PoolParams(Asset.fromAny(token1), Asset.fromAny(token2), amm),
                 ammSettings,
-                null)
+                null,
+            );
         } else {
-            await wallet.sendDepositLiquidityJetton(provider.sender(), toNano('0.1'), vault, asset1,
+            await wallet.sendDepositLiquidityJetton(
+                provider.sender(),
+                toNano('0.1'),
+                vault,
+                asset1,
                 new DepositLiquidityParams(
-                    new DepositLiquidityParamsTrimmed(
-                        BigInt((1 << 30) * 2),
-                        0n,
-                        null,
-                        null,
-                        null
-                    ),
-                    PoolParams.fromAddress(token1, token2, amm)
-                )
-            )
+                    new DepositLiquidityParamsTrimmed(BigInt((1 << 30) * 2), 0n, null, null, null),
+                    PoolParams.fromAddress(token1, token2, amm),
+                ),
+            );
         }
     }
 }
 
 export async function run(provider: NetworkProvider) {
     let compiled = await compileCodes();
-    initCode = compiled.init;
-    vaultNativeCode = compiled.vaultNativeCode;
-    vaultJettonCode = compiled.vaultJettonCode;
-    vaultExtraCode = compiled.vaultExtraCode;
-    poolCode = compiled.poolCode;
-    liquidityDepositoryCode = compiled.liquidityDepositoryCode;
-    poolCreatorCode = compiled.poolCreatorCode;
-    factoryCode = compiled.factoryCode;
 
     let deployer = provider.sender().address as Address;
-    console.log("admin:", deployer);
+    console.log('admin:', deployer);
 
-    let factory = provider.open(
-        Factory.createFromConfig(
-            {
-                admin: deployer,
-                withdrawer: deployer,
-                lpWalletCode: lpWalletCode,
-                initCode: initCode,
-                vaultNativeCode: vaultNativeCode,
-                vaultJettonCode: vaultJettonCode,
-                vaultExtraCode: vaultExtraCode,
-                poolCode: poolCode,
-                liquidityDepositoryCode: liquidityDepositoryCode,
-                poolCreatorCode: poolCreatorCode
-            },
-            factoryCode
-        )
-    );
+    let factory = provider.open(Factory.createFromData(deployer, compiled, deployer));
     const ui = provider.ui();
     console.log('Factory address:', factory.address.toRawString());
 
-    let factoryAddress = await ui.inputAddress("Use either factory above, or custom address", factory.address);
-    console.log("Selected factory: ", factoryAddress.toRawString());
+    let factoryAddress = await ui.inputAddress('Use either factory above, or custom address', factory.address);
+    console.log('Selected factory: ', factoryAddress.toRawString());
     factory = provider.open(Factory.createFromAddress(factoryAddress));
 
-    let tokens = ["T1", "T2", "T3"];
+    while (true) {
+        let tokens = ['T1', 'T2', 'T3'];
 
-    for (let i = 0; i < tokens.length; i++) {
-        let tokenMaster = provider.open(JettonMaster.createFromConfig({
-            owner: deployer,
-            name: tokens[i]
-        }))
-        console.log("Known token:", tokens[i], "address:", tokenMaster.address);
+        for (let i = 0; i < tokens.length; i++) {
+            let tokenMaster = provider.open(
+                JettonMaster.createFromConfig({
+                    owner: deployer,
+                    name: tokens[i],
+                }),
+            );
+            console.log('Known token:', tokens[i], 'address:', tokenMaster.address);
+        }
+        console.log('=======================');
+        console.log('Token address for native vault:', NATIVE_ADDRESS.toRawString());
+
+        const tokenForPool1 = addressToAsset(await ui.inputAddress('Insert first token for pool:'));
+        const tokenForPool2 = addressToAsset(await ui.inputAddress('Insert second token for pool:'));
+        const poolType = await ui.choose('Select pool type', [AMM.CurveFiStable, AMM.ConstantProduct], (x) =>
+            AMM[x].toString(),
+        );
+
+        let poolAddress = await factory.getPoolAddress(tokenForPool1, tokenForPool2, poolType);
+        let isCreated = (await provider.isContractDeployed(poolAddress))
+            ? DepositOrProvide.PROVIDE_LP
+            : DepositOrProvide.CREATE_LP;
+
+        const asset1 = BigInt(await parseInteger(ui, 'Insert first amount'));
+        const asset2 = BigInt(await parseInteger(ui, 'Insert second amount'));
+
+        console.log('Pool will be deployed at:', poolAddress.toRawString());
+        console.log('Is pool created:', await provider.isContractDeployed(poolAddress), 'DepositOrProvide', isCreated);
+
+        let ammSettings: Cell | null = null;
+        if (poolType == AMM.CurveFiStable) {
+            ammSettings = beginCell().storeUint(2_000, 16).storeCoins(1).storeCoins(1).endCell();
+        }
+
+        await sendMessage(provider, factory, tokenForPool1, tokenForPool2, asset1, poolType, ammSettings, isCreated);
+        if (isCreated == DepositOrProvide.CREATE_LP) {
+            await provider.waitForDeploy(
+                await factory.getPoolCreatorAddress(deployer, tokenForPool1, tokenForPool2, poolType),
+                60,
+            );
+        } else {
+            await provider.waitForDeploy(
+                await factory.getLiquidityDepositoryAddress(deployer, tokenForPool1, tokenForPool2, poolType),
+                60,
+            );
+        }
+        await sendMessage(provider, factory, tokenForPool2, tokenForPool1, asset2, poolType, ammSettings, isCreated);
+        await provider.waitForDeploy(await factory.getPoolAddress(tokenForPool1, tokenForPool2, poolType), 60);
     }
-    console.log("=======================")
-    console.log("Token address for native vault:", NATIVE_ADDRESS.toRawString())
-
-
-    const tokenForPool1 = addressToAsset(await ui.inputAddress("Insert first token for pool:"));
-    const tokenForPool2 = addressToAsset(await ui.inputAddress("Insert second token for pool:"));
-    const poolType = await ui.choose("Select pool type", [AMM.CurveFiStable, AMM.ConstantProduct], (x) => AMM[x].toString());
-
-    let poolAddress = await factory.getPoolAddress(tokenForPool1, tokenForPool2, poolType);
-    let isCreated = await provider.isContractDeployed(poolAddress) ? DepositOrProvide.PROVIDE_LP : DepositOrProvide.CREATE_LP;
-
-    const asset1 = BigInt(await parseInteger(ui, "Insert first amount"));
-    const asset2 = BigInt(await parseInteger(ui, "Insert second amount"));
-
-    console.log("Pool will be deployed at:", poolAddress.toRawString());
-    console.log("Is pool created:", await provider.isContractDeployed(poolAddress), "DepositOrProvide", isCreated);
-
-    let ammSettings: Cell | null = null;
-    if (poolType == AMM.CurveFiStable) {
-        ammSettings = beginCell().storeUint(2_000, 16).storeUint(0, 8).storeUint(0, 8).endCell();
-    }
-
-    await sendMessage(provider, factory, tokenForPool1, tokenForPool2, asset1, poolType, ammSettings, isCreated);
-    if (isCreated == DepositOrProvide.CREATE_LP) {
-        await provider.waitForDeploy(await factory.getPoolCreatorAddress(deployer, tokenForPool1, tokenForPool2, poolType), 60);
-    } else {
-        await provider.waitForDeploy(await factory.getLiquidityDepositoryAddress(deployer, tokenForPool1, tokenForPool2, poolType), 60);
-    }
-    await sendMessage(provider, factory, tokenForPool2, tokenForPool1, asset2, poolType, ammSettings, isCreated);
-    await provider.waitForDeploy(await factory.getPoolAddress(tokenForPool1, tokenForPool2, poolType), 60);
 }

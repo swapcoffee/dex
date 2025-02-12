@@ -145,7 +145,9 @@ global slice storage::factory_address;
         if (ton_left_for_gas <= ton_required_for_gas) {
             throw_safely_native(errors::not_enough_gas, sender_address, query_id);
         }
-        (slice asset1, slice asset2, int amm) = in_msg_body~parse_pool_params();
+        slice receiver = in_msg_body~load_msg_addr();
+        slice pool_param = in_msg_body~load_ref().begin_parse();
+        (slice asset1, slice asset2, int amm) = pool_param~parse_pool_params();
         cell amm_settings = in_msg_body~load_maybe_ref();
         cell extra_settings = in_msg_body~load_maybe_ref();
         cell notification_data = in_msg_body~load_maybe_ref();
@@ -155,7 +157,7 @@ global slice storage::factory_address;
         }
         (asset1, asset2, _) = sort_assets(asset1, asset2);
 
-        send_small_builder_carry_inbound(
+        send_cell_carry_inbound(
             storage::factory_address,
             - amount,
             begin_cell()
@@ -172,8 +174,10 @@ global slice storage::factory_address;
                         .end_cell()
                 )
                 .store_maybe_ref(amm_settings)
+                .store_slice(receiver)
                 .store_slice(sender_address)
                 .store_ref(storage::init_data_cell)
+                .end_cell()
         );
     } elseif (opcode == opcodes::update_contract_internal) {
         throw_unless(errors::not_a_factory, equal_slice_bits(storage::factory_address, sender_address));

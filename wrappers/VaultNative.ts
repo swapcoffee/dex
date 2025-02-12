@@ -1,5 +1,6 @@
 import {Address, beginCell, Cell, Contract, ContractProvider, Sender, SendMode, Slice} from '@ton/core';
 import {Asset, DepositLiquidityParams, NotificationData, PoolParams, SwapParams, SwapStepParams} from "./types";
+import { Maybe } from '@ton/core/dist/utils/maybe';
 
 export class VaultNative implements Contract {
     constructor(readonly address: Address, readonly init?: { code: Cell; data: Cell }) {
@@ -31,15 +32,19 @@ export class VaultNative implements Contract {
         await this.sendMessage(provider, via, value, b.endCell());
     }
 
-    async sendCreatePoolNative(provider: ContractProvider, via: Sender, value: bigint, amount: bigint, params: PoolParams, amm_settings: Cell | null, notification_data: NotificationData | null) {
+    async sendCreatePoolNative(provider: ContractProvider, via: Sender, value: bigint, amount: bigint, receiver:Maybe<Address>, params: PoolParams, amm_settings: Cell | null, notification_data: NotificationData | null) {
+        const paramBuilder = beginCell();
+        params.write(paramBuilder);
+
         const b = beginCell()
             .storeUint(0xc0ffee02, 32)
             .storeUint(0, 64)
-            .storeCoins(amount);
-        params.write(b);
-        b.storeMaybeRef(amm_settings);
-        b.storeMaybeRef(null);
-        b.storeMaybeRef(notification_data?.toCell());
+            .storeCoins(amount)
+            .storeAddress(receiver)
+            .storeRef(paramBuilder)
+            .storeMaybeRef(amm_settings)
+            .storeMaybeRef(null)
+            .storeMaybeRef(notification_data?.toCell());
         await this.sendMessage(provider, via, value, b.endCell());
     }
 

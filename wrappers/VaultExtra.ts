@@ -1,5 +1,6 @@
 import {Address, beginCell, Cell, Contract, ContractProvider, Sender, SendMode, Slice} from '@ton/core';
 import {Asset, DepositLiquidityParams, NotificationData, PoolParams, SwapParams, SwapStepParams} from "./types";
+import { Maybe } from '@ton/core/dist/utils/maybe';
 
 export class VaultExtra implements Contract {
     constructor(readonly address: Address, readonly init?: { code: Cell; data: Cell }) {}
@@ -31,11 +32,15 @@ export class VaultExtra implements Contract {
     }
 
     // TODO: add extra currencies
-    async sendCreatePoolExtra(provider: ContractProvider, via: Sender, value: bigint, params: PoolParams, amm_settings: Cell | null, notification_data: NotificationData | null) {
+    async sendCreatePoolExtra(provider: ContractProvider, via: Sender, value: bigint, receiver:Maybe<Address>, params: PoolParams, amm_settings: Cell | null, notification_data: NotificationData | null) {
+        const paramBuilder = beginCell();
+        params.write(paramBuilder);
+
         const b = beginCell()
             .storeUint(0xc0ffee03, 32)
-            .storeUint(0, 64);
-        params.write(b);
+            .storeUint(0, 64)
+            .storeAddress(receiver)
+            .storeRef(paramBuilder);
         b.storeMaybeRef(amm_settings);
         b.storeMaybeRef(null);
         b.storeMaybeRef(notification_data?.toCell());

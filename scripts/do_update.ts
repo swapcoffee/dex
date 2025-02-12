@@ -1,74 +1,89 @@
-import {Address, beginCell, Cell, OpenedContract, toNano} from '@ton/core';
-import {compile, NetworkProvider, UIProvider} from '@ton/blueprint';
-import {Blockchain, SandboxContract, TreasuryContract} from "@ton/sandbox";
-import {JettonMaster, JettonWallet} from "../wrappers/Jetton";
-import {getTransactionAccount} from "../wrappers/utils";
-import {waitSeqNoChange} from "./utils";
-import {compileCodes, lpWalletCode} from "../tests/utils";
-import {buildDataCell, Factory} from "../wrappers/Factory";
+import { Address, beginCell, Cell, OpenedContract, toNano } from '@ton/core';
+import { compile, NetworkProvider, UIProvider } from '@ton/blueprint';
+import { Blockchain, SandboxContract, TreasuryContract } from '@ton/sandbox';
+import { JettonMaster, JettonWallet } from '../wrappers/Jetton';
+import { getTransactionAccount } from '../wrappers/utils';
+import { waitSeqNoChange } from './utils';
+import { compileCodes, lpWalletCode } from '../tests/utils';
+import { buildDataCell, Factory } from '../wrappers/Factory';
 import {
     AMM,
-    Asset, AssetNative,
+    Asset,
+    AssetNative,
     DepositLiquidityParams,
     DepositLiquidityParamsTrimmed,
-    PoolParams, SwapParams,
-    SwapStepParams
-} from "../wrappers/types";
-import {VaultNative} from "../wrappers/VaultNative";
-
-let initCode: Cell;
-let vaultNativeCode: Cell;
-let vaultJettonCode: Cell;
-let vaultExtraCode: Cell;
-let poolCode: Cell;
-let liquidityDepositoryCode: Cell;
-let poolCreatorCode: Cell;
-let factoryCode: Cell;
+    PoolParams,
+    SwapParams,
+    SwapStepParams,
+} from '../wrappers/types';
+import { VaultNative } from '../wrappers/VaultNative';
 
 export async function run(provider: NetworkProvider) {
+    const ui = provider.ui();
     let compiled = await compileCodes();
-    initCode = compiled.init;
-    vaultNativeCode = compiled.vaultNativeCode;
-    vaultJettonCode = compiled.vaultJettonCode;
-    vaultExtraCode = compiled.vaultExtraCode;
-    poolCode = compiled.poolCode;
-    liquidityDepositoryCode = compiled.liquidityDepositoryCode;
-    poolCreatorCode = compiled.poolCreatorCode;
-    factoryCode = compiled.factoryCode;
-
     let deployer = provider.sender().address as Address;
-    console.log("admin:", deployer);
+    console.log('admin:', deployer);
 
-    let factory = provider.open(
-        Factory.createFromAddress(Address.parse("0:7ae4ce963255044de08b0d8f11465d4243273e939a0a9affef7da7abff040908"))
-    );
+    let factory = provider.open(Factory.createFromData(deployer, compiled, deployer));
 
-    let cell = buildDataCell(
-        {
-            admin: deployer,
-            withdrawer: deployer,
-            lpWalletCode: lpWalletCode,
-            initCode: initCode,
-            vaultNativeCode: vaultNativeCode,
-            vaultJettonCode: vaultJettonCode,
-            vaultExtraCode: vaultExtraCode,
-            poolCode: poolCode,
-            liquidityDepositoryCode: liquidityDepositoryCode,
-            poolCreatorCode: poolCreatorCode
+    console.log('Factory address:', factory.address.toRawString());
+    let factoryAddress = await ui.inputAddress('Use either factory above, or custom address', factory.address);
+    console.log('Selected factory: ', factoryAddress.toRawString(), '/', factoryAddress);
+    factory = provider.open(Factory.createFromAddress(factoryAddress));
+
+    while (true) {
+        let nextAddress = await ui.inputAddress('Insert next address to update');
+        if (nextAddress.toRawString() == factory.address.toRawString()) {
+            console.log('Begin factory updating');
+            let dataCell = buildDataCell(deployer, deployer, compiled);
+            await waitSeqNoChange(provider, deployer, async () => {
+                await factory.sendUpdateContract(provider.sender(), toNano(0.1), null, compiled.factory, dataCell);
+            });
+        } else {
+            let state = await provider.provider(nextAddress).getState();
+            if (state.state.type !== 'active') {
+                console.log('Wrong state for address:', nextAddress, 'state:', state.state);
+                continue;
+            }
+            let dataCell = Cell.fromBoc(state.state.data as Buffer)[0];
+            let cs = dataCell.beginParse();
+            cs.loadRef();
+            let initDataS = cs.loadRef().beginParse();
+            let currentFactoryAddress = initDataS.loadAddress();
+            let contractType = initDataS.loadUint(2);
+            if (currentFactoryAddress.toRawString() != factoryAddress.toRawString()) {
+                console.log(
+                    'Unknown factory, expected:',
+                    factoryAddress.toRawString(),
+                    'got:',
+                    currentFactoryAddress.toRawString(),
+                );
+                continue;
+            }
+            if (contractType == 0) {
+                let vaultType = initDataS.loadUint(2);
+                let codeCell;
+                if (vaultType == 0) {
+                    codeCell = compiled.vaultNative;
+                } else if (vaultType == 1) {
+                    codeCell = compiled.vaultJetton;
+                } else if (vaultType == 2) {
+                    codeCell = compiled.vaultExtra;
+                } else {
+                    throw Error('Unknown type: ' + vaultType);
+                }
+                await waitSeqNoChange(provider, deployer, async () => {
+                    await factory.sendUpdateContract(provider.sender(), toNano(0.1), nextAddress, codeCell, null);
+                });
+            } else if (contractType == 1) {
+                throw Error('Plz implement pool modification');
+            } else if (contractType == 2) {
+                throw Error('Plz implement liquidity_depository modification');
+            } else if (contractType == 3) {
+                throw Error('Plz implement pool_creator modification');
+            } else {
+                throw Error('Unknown type: ' + contractType);
+            }
         }
-    )
-
-    await waitSeqNoChange(provider, deployer, async () => {
-        await factory.sendUpdateCodeCell(provider.sender(), toNano(0.1), cell.refs[0])
-    });
-
-    await waitSeqNoChange(provider, deployer, async () => {
-        await factory.sendUpdateContract(
-            provider.sender(),
-            toNano(0.1),
-            Address.parse("0:2f2308218672ac5c80bde13cd8c22f74f7028bae8a241d225c411a1f165a7aec"),
-            poolCode,
-            null
-        )
-    });
+    }
 }

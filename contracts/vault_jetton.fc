@@ -146,7 +146,9 @@ global slice storage::jetton_wallet_address;
                     amount
                 );
             }
-            (slice asset1, slice asset2, int amm) = fwd_payload_cs~parse_pool_params();
+            slice receiver = fwd_payload_cs~load_msg_addr();
+            slice pool_param = fwd_payload_cs~load_ref().begin_parse();
+            (slice asset1, slice asset2, int amm) = pool_param~parse_pool_params();
             cell amm_settings = fwd_payload_cs~load_maybe_ref();
             cell extra_settings = fwd_payload_cs~load_maybe_ref();
             cell notification_data = fwd_payload_cs~load_maybe_ref();
@@ -162,7 +164,7 @@ global slice storage::jetton_wallet_address;
             }
             (asset1, asset2, _) = sort_assets(asset1, asset2);
 
-            send_small_builder_carry_inbound(
+            send_cell_carry_inbound(
                 storage::factory_address,
                 0,
                 begin_cell()
@@ -179,8 +181,10 @@ global slice storage::jetton_wallet_address;
                             .end_cell()
                     )
                     .store_maybe_ref(amm_settings)
+                    .store_slice(receiver)
                     .store_slice(from_addr)
                     .store_ref(storage::init_data_cell)
+                    .end_cell()
             );
         } else {
             throw_safely_jetton(
