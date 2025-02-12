@@ -132,6 +132,50 @@ export class PoolParams extends CellSerializable {
     }
 }
 
+export class PublicPoolCreationParams extends CellSerializable {
+    constructor(
+        public recipient: Address,
+        public notification_data: NotificationData | null = null
+    ) {
+        super()
+    }
+
+    public write(b: Builder): void {
+        b.storeAddress(this.recipient)
+        b.storeMaybeRef(this.notification_data?.toCell())
+    }
+}
+
+export class PrivatePoolCreationParams extends CellSerializable {
+    constructor(
+        public is_active: boolean = true,
+        public amm_settings: Cell | null = null,
+        public extra_settings: Cell | null = null
+    ) {
+        super()
+    }
+
+    public write(b: Builder): void {
+        b.storeUint(this.is_active ? 1 : 0, 1)
+        b.storeMaybeRef(this.amm_settings)
+        b.storeMaybeRef(this.extra_settings)
+    }
+}
+
+export class PoolCreationParams extends CellSerializable {
+    constructor(
+        public pub: PublicPoolCreationParams,
+        public priv: PrivatePoolCreationParams = new PrivatePoolCreationParams()
+    ) {
+        super()
+    }
+
+    public write(b: Builder): void {
+        this.pub.write(b);
+        this.priv.write(b);
+    }
+}
+
 export class NotificationDataSingle extends CellSerializable {
     constructor(
         public receiver: Address | null,

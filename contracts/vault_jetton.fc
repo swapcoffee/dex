@@ -146,13 +146,7 @@ global slice storage::jetton_wallet_address;
                     amount
                 );
             }
-            slice receiver = fwd_payload_cs~load_msg_addr();
-            slice pool_param = fwd_payload_cs~load_ref().begin_parse();
-            (slice asset1, slice asset2, int amm) = pool_param~parse_pool_params();
-            cell amm_settings = fwd_payload_cs~load_maybe_ref();
-            cell extra_settings = fwd_payload_cs~load_maybe_ref();
-            cell notification_data = fwd_payload_cs~load_maybe_ref();
-
+            (slice asset1, slice asset2, int amm) = fwd_payload_cs~parse_pool_params();
             if (equal_slice_bits(asset1, asset2)) {
                 throw_safely_jetton(
                     errors::same_assets,
@@ -163,6 +157,11 @@ global slice storage::jetton_wallet_address;
                 );
             }
             (asset1, asset2, _) = sort_assets(asset1, asset2);
+            slice recipient = fwd_payload_cs~load_msg_addr();
+            cell notification_data = fwd_payload_cs~load_maybe_ref();
+            int is_active = fwd_payload_cs~load_uint(1);
+            cell amm_settings = fwd_payload_cs~load_maybe_ref();
+            cell extra_settings = fwd_payload_cs~load_maybe_ref();
 
             send_cell_carry_inbound(
                 storage::factory_address,
@@ -171,17 +170,18 @@ global slice storage::jetton_wallet_address;
                     .store_uint(opcodes::create_pool_creator_request, 32)
                     .store_uint(query_id, 64)
                     .store_coins(amount)
+                    .store_slice(asset1)
+                    .store_slice(asset2)
+                    .store_uint(amm, 3)
                     .store_ref(
                         begin_cell()
-                            .store_slice(asset1)
-                            .store_slice(asset2)
-                            .store_uint(amm, 3)
-                            .store_maybe_ref(extra_settings)
+                            .store_slice(recipient)
                             .store_maybe_ref(notification_data)
+                            .store_uint(is_active, 1)
+                            .store_maybe_ref(amm_settings)
+                            .store_maybe_ref(extra_settings)
                             .end_cell()
                     )
-                    .store_maybe_ref(amm_settings)
-                    .store_slice(receiver)
                     .store_slice(from_addr)
                     .store_ref(storage::init_data_cell)
                     .end_cell()

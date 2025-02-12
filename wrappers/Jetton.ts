@@ -9,7 +9,14 @@ import {
     SendMode, toNano
 } from '@ton/core';
 import {Opcodes} from "./utils";
-import {DepositLiquidityParams, NotificationData, PoolParams, SwapParams, SwapStepParams} from "./types";
+import {
+    DepositLiquidityParams,
+    NotificationData,
+    PoolCreationParams,
+    PoolParams, PrivatePoolCreationParams, PublicPoolCreationParams,
+    SwapParams,
+    SwapStepParams
+} from './types';
 import { Maybe } from '@ton/core/dist/utils/maybe';
 
 export type JettonConfig = {
@@ -137,16 +144,26 @@ export class JettonWallet implements Contract {
         await this.sendTransferWithPayload(provider, via, value, vault, amount, b.endCell());
     }
 
-    async sendCreatePoolJetton(provider: ContractProvider, via: Sender, value: bigint, vault: Address, amount: bigint, receiver:Maybe<Address>, params: PoolParams, amm_settings: Cell | null, notification_data: NotificationData | null) {
-        const paramBuilder = beginCell();
-        params.write(paramBuilder);
+    async sendCreatePoolJetton(provider: ContractProvider, via: Sender, value: bigint, vault: Address, amount: bigint, recipient: Address, params: PoolParams, amm_settings: Cell | null, notification_data: NotificationData | null) {
+        await this.sendCreatePoolJettonFromParams(
+            provider,
+            via,
+            value,
+            vault,
+            amount,
+            params,
+            new PoolCreationParams(
+                new PublicPoolCreationParams(recipient, notification_data),
+                new PrivatePoolCreationParams(true, amm_settings, null)
+            )
+        )
+    }
+
+    async sendCreatePoolJettonFromParams(provider: ContractProvider, via: Sender, value: bigint, vault: Address, amount: bigint, params: PoolParams, creation_params: PoolCreationParams) {
         const b = beginCell()
             .storeUint(0xc0ffee11, 32)
-            .storeAddress(receiver)
-            .storeRef(paramBuilder);
-        b.storeMaybeRef(amm_settings);
-        b.storeMaybeRef(null);
-        b.storeMaybeRef(notification_data?.toCell());
+        params.write(b)
+        creation_params.write(b)
         await this.sendTransferWithPayload(provider, via, value, vault, amount, b.endCell());
     }
 

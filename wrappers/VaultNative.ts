@@ -1,5 +1,13 @@
 import {Address, beginCell, Cell, Contract, ContractProvider, Sender, SendMode, Slice} from '@ton/core';
-import {Asset, DepositLiquidityParams, NotificationData, PoolParams, SwapParams, SwapStepParams} from "./types";
+import {
+    Asset,
+    DepositLiquidityParams,
+    NotificationData,
+    PoolCreationParams,
+    PoolParams, PrivatePoolCreationParams, PublicPoolCreationParams,
+    SwapParams,
+    SwapStepParams
+} from './types';
 import { Maybe } from '@ton/core/dist/utils/maybe';
 
 export class VaultNative implements Contract {
@@ -32,20 +40,28 @@ export class VaultNative implements Contract {
         await this.sendMessage(provider, via, value, b.endCell());
     }
 
-    async sendCreatePoolNative(provider: ContractProvider, via: Sender, value: bigint, amount: bigint, receiver:Maybe<Address>, params: PoolParams, amm_settings: Cell | null, notification_data: NotificationData | null) {
-        const paramBuilder = beginCell();
-        params.write(paramBuilder);
+    async sendCreatePoolNative(provider: ContractProvider, via: Sender, value: bigint, amount: bigint, recipient: Address, params: PoolParams, amm_settings: Cell | null, notification_data: NotificationData | null) {
+        await this.sendCreatePoolNativeFromParams(
+            provider,
+            via,
+            value,
+            amount,
+            params,
+            new PoolCreationParams(
+                new PublicPoolCreationParams(recipient, notification_data),
+                new PrivatePoolCreationParams(true, amm_settings, null)
+            )
+        )
+    }
 
+    async sendCreatePoolNativeFromParams(provider: ContractProvider, via: Sender, value: bigint, amount: bigint, params: PoolParams, creation_params: PoolCreationParams) {
         const b = beginCell()
             .storeUint(0xc0ffee02, 32)
             .storeUint(0, 64)
             .storeCoins(amount)
-            .storeAddress(receiver)
-            .storeRef(paramBuilder)
-            .storeMaybeRef(amm_settings)
-            .storeMaybeRef(null)
-            .storeMaybeRef(notification_data?.toCell());
-        await this.sendMessage(provider, via, value, b.endCell());
+        params.write(b)
+        creation_params.write(b)
+        await this.sendMessage(provider, via, value, b.endCell())
     }
 
     async sendDepositLiquidityNative(provider: ContractProvider, via: Sender, value: bigint, input_amount: bigint, params: DepositLiquidityParams) {

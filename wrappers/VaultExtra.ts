@@ -1,5 +1,13 @@
 import {Address, beginCell, Cell, Contract, ContractProvider, Sender, SendMode, Slice} from '@ton/core';
-import {Asset, DepositLiquidityParams, NotificationData, PoolParams, SwapParams, SwapStepParams} from "./types";
+import {
+    Asset,
+    DepositLiquidityParams,
+    NotificationData,
+    PoolCreationParams,
+    PoolParams, PrivatePoolCreationParams, PublicPoolCreationParams,
+    SwapParams,
+    SwapStepParams
+} from './types';
 import { Maybe } from '@ton/core/dist/utils/maybe';
 
 export class VaultExtra implements Contract {
@@ -32,18 +40,25 @@ export class VaultExtra implements Contract {
     }
 
     // TODO: add extra currencies
-    async sendCreatePoolExtra(provider: ContractProvider, via: Sender, value: bigint, receiver:Maybe<Address>, params: PoolParams, amm_settings: Cell | null, notification_data: NotificationData | null) {
-        const paramBuilder = beginCell();
-        params.write(paramBuilder);
+    async sendCreatePoolExtra(provider: ContractProvider, via: Sender, value: bigint, recipient: Address, params: PoolParams, amm_settings: Cell | null, notification_data: NotificationData | null) {
+        await this.sendCreatePoolExtraFromParams(
+            provider,
+            via,
+            value,
+            params,
+            new PoolCreationParams(
+                new PublicPoolCreationParams(recipient, notification_data),
+                new PrivatePoolCreationParams(true, amm_settings, null)
+            )
+        )
+    }
 
+    async sendCreatePoolExtraFromParams(provider: ContractProvider, via: Sender, value: bigint, params: PoolParams, creation_params: PoolCreationParams) {
         const b = beginCell()
             .storeUint(0xc0ffee03, 32)
             .storeUint(0, 64)
-            .storeAddress(receiver)
-            .storeRef(paramBuilder);
-        b.storeMaybeRef(amm_settings);
-        b.storeMaybeRef(null);
-        b.storeMaybeRef(notification_data?.toCell());
+        params.write(b)
+        creation_params.write(b)
         await this.sendMessage(provider, via, value, b.endCell());
     }
 
