@@ -19,6 +19,6 @@ export async function run(provider: NetworkProvider) {
         return;
     }
     console.log('factory address =', factory.address.toRawString());
-    await factory.sendDeploy(provider.sender(), toNano('0.1'));
+    await factory.sendDeploy(provider.sender(), toNano(0.1));
     await provider.waitForDeploy(factory.address);
 }

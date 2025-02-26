@@ -2,8 +2,8 @@
 #include "include/constants.fc";
 #include "include/messages.fc";
 #include "include/gas.fc";
+#include "include/reservation.fc";
 #include "include/stdlib.fc";
-#include "include/throw_safely.fc";
 
 global cell storage::init_code_cell;
 global cell storage::init_data_cell;
@@ -52,18 +52,18 @@ global slice storage::factory_address;
         }
 
         verify_proof(storage::factory_address, storage::init_code_cell, sender_address, in_msg_body~load_maybe_ref(), true);
+        reserve_for_carry_inbound_with_value(amount);
         if (cell_null?(notification)) {
-            send_small_builder_carry_inbound(
+            send_builder(
                 recipient,
-                amount,
                 begin_cell()
                     .store_uint(opcodes::payout, 32)
-                    .store_uint(query_id, 64)
+                    .store_uint(query_id, 64),
+                SEND_MODE_CARRY_ALL_BALANCE
             );
         } elseif (is_address_none(notification_receiver) | equal_slice_bits(recipient, notification_receiver)) {
             send_cell_carry_inbound(
                 recipient,
-                amount,
                 notification
             );
         } else {
@@ -72,29 +72,30 @@ global slice storage::factory_address;
                 notification_fwd_gas,
                 notification
             );
-            send_small_builder_carry_inbound(
+            send_builder(
                 recipient,
-                amount - notification_fwd_gas,
                 begin_cell()
                     .store_uint(opcodes::payout, 32)
-                    .store_uint(query_id, 64)
+                    .store_uint(query_id, 64),
+                SEND_MODE_CARRY_ALL_BALANCE
             );
         }
     } elseif (opcode == opcodes::swap_native) {
         int amount = in_msg_body~load_coins();
-        int ton_left_for_gas = msg_value - amount - get_storage_fees();
         int ton_required_for_gas = get_compute_fee(BASECHAIN, gas::swap::computation) + fwd_fee * gas::swap::fwd_steps;
-        if ((ton_left_for_gas <= ton_required_for_gas) | (amount == 0)) {
-            throw_safely_native(errors::not_enough_gas, sender_address, query_id);
-        }
+        throw_if(
+            errors::not_enough_gas,
+            (msg_value - amount <= ton_required_for_gas) | (amount == 0)
+        );
         int pool_address_hash = in_msg_body~load_uint(256);
         int min_output_amount = in_msg_body~load_coins();
         cell next = in_msg_body~load_maybe_ref();
         cell params = in_msg_body~load_ref();
 
-        send_hash_small_builder_carry_inbound(
+        reserve_for_carry_inbound_with_value(- amount);
+        send_hash_builder(
             pool_address_hash,
-            - amount,
+            0,
             begin_cell()
                 .store_uint(opcodes::swap_internal, 32)
                 .store_uint(query_id, 64)
@@ -103,27 +104,27 @@ global slice storage::factory_address;
                 .store_coins(min_output_amount)
                 .store_maybe_ref(next)
                 .store_ref(params)
-                .store_ref(storage::init_data_cell)
+                .store_ref(storage::init_data_cell),
+            SEND_MODE_CARRY_ALL_BALANCE
         );
     } elseif (opcode == opcodes::deposit_liquidity_native) {
         int amount = in_msg_body~load_coins();
         int ton_left_for_gas = msg_value - amount;
         int ton_required_for_gas = get_compute_fee(BASECHAIN, gas::deposit_liquidity::computation) + fwd_fee * gas::deposit_liquidity::fwd_steps;
-        if (ton_left_for_gas <= ton_required_for_gas) {
-            throw_safely_native(errors::not_enough_gas, sender_address, query_id);
-        }
+        throw_if(
+            errors::not_enough_gas,
+            ton_left_for_gas <= ton_required_for_gas
+        );
         cell liquidity_params = in_msg_body~load_ref();
         cell pool_params = in_msg_body~load_ref();
 
         (_, (slice asset1, slice asset2, int amm)) = parse_pool_params(pool_params.begin_parse());
-        if (equal_slice_bits(asset1, asset2)) {
-            throw_safely_native(errors::same_assets, sender_address, query_id);
-        }
+        throw_if(errors::same_assets, equal_slice_bits(asset1, asset2));
         (asset1, asset2, int sorted) = sort_assets(asset1, asset2);
 
-        send_small_builder_carry_inbound(
+        reserve_for_carry_inbound_with_value(- amount);
+        send_builder(
             storage::factory_address,
-            - amount,
             begin_cell()
                 .store_uint(opcodes::create_liquidity_depository_request, 32)
                 .store_uint(query_id, 64)
@@ -136,19 +137,19 @@ global slice storage::factory_address;
                         .store_uint(amm, 3)
                         .end_cell() : pool_params
                 )
-                .store_ref(storage::init_data_cell)
+                .store_ref(storage::init_data_cell),
+            SEND_MODE_CARRY_ALL_BALANCE
         );
     } elseif (opcode == opcodes::create_pool_native) {
         int amount = in_msg_body~load_coins();
         int ton_left_for_gas = msg_value - amount;
-        int ton_required_for_gas = get_compute_fee(BASECHAIN, gas::create_pool::computation) + fwd_fee * gas::create_pool::fwd_steps;
-        if (ton_left_for_gas <= ton_required_for_gas) {
-            throw_safely_native(errors::not_enough_gas, sender_address, query_id);
-        }
+        int ton_required_for_gas = get_compute_fee(BASECHAIN, gas::create_pool::computation) + fwd_fee * gas::create_pool::fwd_steps + gas::create_pool::ton_reserves;
+        throw_if(
+            errors::not_enough_gas,
+            ton_left_for_gas <= ton_required_for_gas
+        );
         (slice asset1, slice asset2, int amm) = in_msg_body~parse_pool_params();
-        if (equal_slice_bits(asset1, asset2)) {
-            throw_safely_native(errors::same_assets, sender_address, query_id);
-        }
+        throw_if(errors::same_assets, equal_slice_bits(asset1, asset2));
         (asset1, asset2, _) = sort_assets(asset1, asset2);
         slice recipient = in_msg_body~load_msg_addr();
         cell notification_data = in_msg_body~load_maybe_ref();
@@ -156,9 +157,9 @@ global slice storage::factory_address;
         cell amm_settings = in_msg_body~load_maybe_ref();
         cell extra_settings = in_msg_body~load_maybe_ref();
 
+        reserve_for_carry_inbound_with_value(- amount);
         send_cell_carry_inbound(
             storage::factory_address,
-            - amount,
             begin_cell()
                 .store_uint(opcodes::create_pool_creator_request, 32)
                 .store_uint(query_id, 64)
@@ -181,9 +182,10 @@ global slice storage::factory_address;
         );
     } elseif (opcode == opcodes::update_contract_internal) {
         throw_unless(errors::not_a_factory, equal_slice_bits(storage::factory_address, sender_address));
+        reserve_for_carry_inbound_without_value();
         update_contract(query_id, in_msg_body~load_msg_addr(), in_msg_body);
     } else {
-        throw_safely_native(errors::unknown_opcode, sender_address, query_id);
+        throw(errors::unknown_opcode);
     }
     return ();
 }

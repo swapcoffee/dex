@@ -812,32 +812,29 @@ describe('Test', () => {
             notificationAddress = admin.address;
             resolvedNotificationAddress = admin.address;
         }
+        const poolParams = new PoolParams(
+            await resolveVault(t1).getAssetParsed(),
+            await resolveVault(t2).getAssetParsed(),
+            AMM.ConstantProduct
+        )
 
         await createPool(user,
             resolveVault(t1),
             toNano(1),
-            new PoolParams(
-                await resolveVault(t1).getAssetParsed(),
-                await resolveVault(t2).getAssetParsed(),
-                AMM.ConstantProduct
-            ),
+            poolParams,
             null
         );
 
         await createPool(user,
             resolveVault(t2),
             toNano(1),
-            new PoolParams(
-                await resolveVault(t1).getAssetParsed(),
-                await resolveVault(t2).getAssetParsed(),
-                AMM.ConstantProduct
-            ),
+            poolParams,
             null
         )
         let pool = blockchain.openContract(
             await factory.getPoolJettonBased(
-                await resolveVault(t1).getAssetParsed(),
-                await resolveVault(t2).getAssetParsed(),
+                poolParams.first_asset,
+                poolParams.second_asset,
                 AMM.ConstantProduct
             )
         );
@@ -847,21 +844,13 @@ describe('Test', () => {
         await createPool(user,
             resolveVault(t1),
             toNano(1),
-            new PoolParams(
-                await resolveVault(t1).getAssetParsed(),
-                await resolveVault(t2).getAssetParsed(),
-                AMM.ConstantProduct
-            ),
+            poolParams,
             null
         );
         let txs = await createPool(user,
             resolveVault(t2),
             toNano(1),
-            new PoolParams(
-                await resolveVault(t1).getAssetParsed(),
-                await resolveVault(t2).getAssetParsed(),
-                AMM.ConstantProduct
-            ),
+            poolParams,
             new NotificationData(
                 null,
                 new NotificationDataSingle(

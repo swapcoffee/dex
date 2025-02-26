@@ -2,6 +2,8 @@
 #include "storage.fc";
 #include "../../include/commons.fc";
 #include "../../include/constants.fc";
+#include "../../include/gas.fc";
+#include "../../include/stdlib.fc";
 
 {- SWAP -}
 
@@ -116,7 +118,7 @@
         output_asset = storage::asset1;
         update_reserves(r2 - output_amount, r1 + input_amount + lp_fee, storage::total_supply);
     }
-    int fwd_fee = send_event(
+    send_event_builder(
         begin_cell()
             .store_uint(opcodes::swap_successful_event, 32)
             .store_uint(query_id, 64)
@@ -133,7 +135,7 @@
             output_asset
         );
         builder body = build_payout_internal_body(query_id, recipient, output_amount, notification_data_success, storage::init_data_cell);
-        send_hash_small_builder_carry_inbound(vault_address_hash, - fwd_fee, body);
+        send_hash_builder(vault_address_hash, 0, body, SEND_MODE_CARRY_ALL_BALANCE);
     } else {
         slice next_cs = next.begin_parse();
         int next_pool_address_hash = next_cs~load_uint(256);
@@ -149,7 +151,7 @@
             .store_maybe_ref(next_next)
             .store_ref(params)
             .store_ref(storage::init_data_cell);
-        send_hash_builder_carry_inbound(next_pool_address_hash, - fwd_fee, body);
+        send_hash_builder(next_pool_address_hash, 0, body, SEND_MODE_CARRY_ALL_BALANCE);
     }
 }
 
@@ -265,7 +267,7 @@
     int reserve1_new = storage::reserve1 + amount1_used;
     int reserve2_new = storage::reserve2 + amount2_used;
     int total_supply_new = storage::total_supply + lp_amount + lp_to_lock;
-    int fwd_fee = send_event(
+    send_event(
         begin_cell()
             .store_uint(opcodes::deposit_liquidity_successful_event, 32)
             .store_uint(query_id, 64)
@@ -293,15 +295,18 @@
         notification_fwd_gas = cs~load_coins();
         notification = cs~load_ref();
     }
-    int inbound_balance_left = get_inbound_balance_left();
+    int inbound_balance_left = get_incoming_value_minus_storage_fees();
     throw_unless(errors::not_enough_gas, inbound_balance_left > notification_fwd_gas);
     cell state_init = gen_lp_wallet_state_init(recipient, my_address(), storage::lp_wallet_code);
     int destination_hash = cell_hash(state_init);
 
-    int fwd_value = (get_inbound_balance_left() - notification_fwd_gas - fwd_fee) / 3;
-    int fwd_value_sum = fwd_fee;
+    if (creation) {
+        reserve_for_carry_inbound_with_value(- gas::create_pool::ton_reserves);
+    } else {
+        reserve_for_carry_inbound_without_value();
+    }
+    int fwd_value = (inbound_balance_left - notification_fwd_gas) / 3;
     if (amount1 > amount1_used) {
-        fwd_value_sum += fwd_value;
         send_hash_builder(
             calculate_vault_address_hash(
                 storage::factory_address,
@@ -314,7 +319,6 @@
         );
     }
     if (amount2 > amount2_used) {
-        fwd_value_sum += fwd_value;
         send_hash_builder(
             calculate_vault_address_hash(
                 storage::factory_address,
@@ -329,7 +333,6 @@
     if (cell_null?(notification)) {
         send_hash_cell_init_carry_inbound(
             destination_hash,
-            - fwd_value_sum,
             begin_cell()
                 .store_uint(opcodes::internal_transfer, 32)
                 .store_uint(query_id, 64)
@@ -344,7 +347,6 @@
     } elseif (is_address_none(notification_receiver) | equal_slice_bits(recipient, notification_receiver)) {
         send_hash_cell_init_carry_inbound(
             destination_hash,
-            - fwd_value_sum,
             begin_cell()
                 .store_uint(opcodes::internal_transfer, 32)
                 .store_uint(query_id, 64)
@@ -364,7 +366,6 @@
         );
         send_hash_cell_init_carry_inbound(
             destination_hash,
-            - notification_fwd_gas - fwd_value_sum,
             begin_cell()
                 .store_uint(opcodes::internal_transfer, 32)
                 .store_uint(query_id, 64)
@@ -401,7 +402,7 @@
     int total_supply_new = total_supply - lp_amount;
 
     update_reserves(reserve1_new, reserve2_new, total_supply_new);
-    int fwd_fee = send_event(
+    send_event(
         begin_cell()
             .store_uint(opcodes::liquidity_withdrawal_event, 32)
             .store_uint(query_id, 64)
@@ -413,7 +414,7 @@
             .store_coins(reserve1)
             .store_coins(reserve2)
     );
-    send_back(- fwd_fee, query_id, amount1, amount2, from_address, null(), false);
+    send_back(query_id, amount1, amount2, from_address, null(), false);
 }
 
 {- GET METHODS -}

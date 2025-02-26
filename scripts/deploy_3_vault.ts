@@ -58,9 +58,9 @@ export async function run(provider: NetworkProvider) {
     console.log('Vault address to be deployed at address  =', vaultAddress.toRawString());
 
     if (tokenForVault.toRawString() == NATIVE_ADDRESS.toRawString()) {
-        await factory.sendCreateVault(provider.sender(), toNano('0.1'), null);
+        await factory.sendCreateVault(provider.sender(), toNano(0.1), null);
     } else {
-        await factory.sendCreateVault(provider.sender(), toNano('0.1'), tokenForVault);
+        await factory.sendCreateVault(provider.sender(), toNano(0.1), tokenForVault);
     }
     await provider.waitForDeploy(vaultAddress);
 }

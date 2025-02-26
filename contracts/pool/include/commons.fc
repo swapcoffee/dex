@@ -1,5 +1,7 @@
 #include "storage.fc";
 #include "../../include/commons.fc";
+#include "../../include/gas.fc";
+#include "../../include/reservation.fc";
 
 {- UTILITY -}
 
@@ -57,7 +59,7 @@ int get_direction_from_proof(slice cs, slice previous_asset_hint) inline {
 }
 
 () throw_safely_for_swap(int excno, int query_id, slice input_asset, int amount, slice recipient, cell reserves, cell notification_data) impure inline_ref {
-    int fwd_fee = send_event(
+    send_event_builder(
         begin_cell()
             .store_uint(opcodes::swap_failed_event, 32)
             .store_uint(query_id, 64)
@@ -65,20 +67,21 @@ int get_direction_from_proof(slice cs, slice previous_asset_hint) inline {
             .store_coins(amount)
             .store_maybe_ref(reserves)
     );
-    send_hash_small_builder_carry_inbound(
+    send_hash_builder(
         calculate_vault_address_hash(
             storage::factory_address,
             storage::init_code_cell,
             input_asset
         ),
-        - fwd_fee - get_compute_fee(BASECHAIN, 102), ;; COMMIT (26) + THROWANY (76)
-        build_payout_internal_body(query_id, recipient, amount, notification_data, storage::init_data_cell)
+        0,
+        build_payout_internal_body(query_id, recipient, amount, notification_data, storage::init_data_cell),
+        SEND_MODE_CARRY_ALL_BALANCE
     );
     commit();
     throw(excno);
 }
 
-() send_back(int balance_decrement, int query_id, int amount1, int amount2, slice recipient, cell notification_data, int self_destroy) impure inline_ref {
+() send_back(int query_id, int amount1, int amount2, slice recipient, cell notification_data, int self_destroy) impure inline_ref {
     cell notification_data_single = null();
     ifnot (cell_null?(notification_data)) {
         slice notification_data_cs = notification_data.begin_parse();
@@ -95,30 +98,38 @@ int get_direction_from_proof(slice cs, slice previous_asset_hint) inline {
         storage::init_code_cell,
         storage::asset2
     );
-    int value = get_incoming_value() - get_storage_fees() - balance_decrement;
+    int value = get_incoming_value_minus_storage_fees();
     int half = value / 2 - 1;
-    value -= send_hash_builder(
+    send_hash_builder(
         vault1_hash,
         half,
-        build_payout_internal_body(query_id, recipient, amount1, notification_data_single, storage::init_data_cell),
+        build_payout_internal_body(
+            query_id,
+            recipient,
+            amount1,
+            notification_data_single,
+            storage::init_data_cell
+        ),
         SEND_MODE_REGULAR
-    ) + half;
+    );
+    builder body = build_payout_internal_body(
+        query_id,
+        recipient,
+        amount2,
+        notification_data_single,
+        storage::init_data_cell
+    );
     if (self_destroy) {
-        send_hash_builder(
-            vault2_hash,
-            0,
-            build_payout_internal_body(query_id, recipient, amount2, notification_data_single, storage::init_data_cell),
-            SEND_MODE_SELF_DESTROY
-        );
+        send_hash_builder(vault2_hash, 0, body, SEND_MODE_SELF_DESTROY);
     } else {
+        reserve_for_carry_inbound_without_value();
         builder body = build_payout_internal_body(query_id, recipient, amount2, notification_data_single, storage::init_data_cell);
-        value -= get_compute_fee(BASECHAIN, 877 + 526 + 80 + gas_consumed());
-        send_hash_small_builder(vault2_hash, value, body);
+        send_hash_builder(vault2_hash, 0, body, SEND_MODE_CARRY_ALL_BALANCE);
     }
 }
 
 () throw_safely_for_liquidity(int excno, int query_id, int amount1, int amount2, slice recipient, int min_lp_amount, cell notification_data, int self_destroy) impure inline_ref {
-    int fwd_fee = send_event(
+    send_event_builder(
         begin_cell()
             .store_uint(opcodes::deposit_liquidity_failed_event, 32)
             .store_uint(query_id, 64)
@@ -129,9 +140,7 @@ int get_direction_from_proof(slice cs, slice previous_asset_hint) inline {
             .store_coins(storage::reserve1)
             .store_coins(storage::reserve2)
     );
-    ;; 26 (COMMIT) + 18 (XCHG) + 84 (THROW) + RET (8) = 136
-    int balance_decrement = fwd_fee + get_compute_fee(BASECHAIN, 136);
-    send_back(balance_decrement, query_id, amount1, amount2, recipient, notification_data, self_destroy);
+    send_back(query_id, amount1, amount2, recipient, notification_data, self_destroy);
     commit();
     throw(excno);
 }
@@ -162,12 +171,13 @@ int get_direction_from_proof(slice cs, slice previous_asset_hint) inline {
     }
     update_settings(amm_settings, protocol_fee, lp_fee, is_active);
     ifnot (is_address_none(excesses_receiver)) {
-        send_small_builder_carry_inbound(
+        reserve_for_carry_inbound_without_value();
+        send_builder(
             excesses_receiver,
-            0,
             begin_cell()
                 .store_uint(opcodes::excesses, 32)
-                .store_uint(query_id, 64)
+                .store_uint(query_id, 64),
+            SEND_MODE_CARRY_ALL_BALANCE
         );
     }
 }
