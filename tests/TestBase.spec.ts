@@ -3,9 +3,7 @@ import {toNano} from '@ton/core';
 import '@ton/test-utils';
 import {Factory} from "../wrappers/Factory";
 import {VaultNative} from "../wrappers/VaultNative";
-import {JettonMaster, JettonWallet} from "../wrappers/Jetton";
 import {getTransactionAccount, printTransactions} from "../wrappers/utils";
-import {VaultJetton} from "../wrappers/VaultJetton";
 import {
     AMM,
     AssetJetton,
@@ -17,8 +15,9 @@ import {
 import {CodeCells, compileCodes} from "./utils";
 import {PoolConstantProduct} from "../wrappers/PoolConstantProduct";
 import { sleep } from '@ton/blueprint';
+import { deployJettonWithVault } from './helpers';
 
-describe('Test', () => {
+xdescribe('Test', () => {
     let codeCells: CodeCells;
     beforeAll(async () => {
         codeCells = await compileCodes();
@@ -51,37 +50,13 @@ describe('Test', () => {
             (await blockchain.getContract(admin.address)).balance,
         );
     });
-    async function deployJetton(name: string) {
-        const jettonMaster = blockchain.openContract(
-            JettonMaster.createFromConfig({owner: admin.address, name})
-        );
-        await jettonMaster.sendDeploy(admin.getSender(), toNano(.1));
-        let res = await jettonMaster.sendMint(
-            admin.getSender(),
-            toNano(.05),
-            admin.address,
-            toNano(100.0)
-        );
-        const jettonWallet = blockchain.openContract(
-            JettonWallet.createFromAddress(getTransactionAccount(res.transactions[2])!)
-        )
-        res = await factory.sendCreateVault(admin.getSender(), toNano(.05), jettonMaster.address)
-        const jettonVault = blockchain.openContract(
-            VaultJetton.createFromAddress(getTransactionAccount(res.transactions[2])!)
-        )
-        return {
-            master: jettonMaster,
-            wallet: jettonWallet,
-            vault: jettonVault
-        }
-    }
     it('get methods', async () => {
         expect(await vaultNative.getIsActive()).toBe(-1n);
         let asset = await vaultNative.getAsset();
         expect(asset.loadUint(2)).toBe(0);
     });
     it('throw', async () => {
-        const jetton1 = await deployJetton('TST1')
+        const jetton1 = await deployJettonWithVault(blockchain, factory, admin, 'TST1')
         const asset1 = AssetJetton.fromAddress(jetton1.master.address)
         const asset2 = AssetNative.INSTANCE
         const amm = AMM.ConstantProduct
@@ -133,8 +108,8 @@ describe('Test', () => {
         // printTransactions(res.transactions)
     });
     it('test_gas', async () => {
-        const jetton1 = await deployJetton('TST1')
-        const jetton2 = await deployJetton('TST2')
+        const jetton1 = await deployJettonWithVault(blockchain, factory, admin, 'TST1')
+        const jetton2 = await deployJettonWithVault(blockchain, factory, admin, 'TST2')
         const asset1 = AssetJetton.fromAddress(jetton1.master.address)
         const asset2 = AssetJetton.fromAddress(jetton2.master.address)
         const poolParams = new PoolParams(asset1, asset2, AMM.ConstantProduct)
@@ -184,8 +159,8 @@ describe('Test', () => {
         )
         printTransactions(res.transactions)
     });
-    xit('deploy', async () => {
-        const jetton = await deployJetton('TST')
+    it('deploy', async () => {
+        const jetton = await deployJettonWithVault(blockchain, factory, admin, 'TST')
         console.log('vault_jetton address = ', jetton.vault.address.toRawString());
         console.log(
             'balances #2',

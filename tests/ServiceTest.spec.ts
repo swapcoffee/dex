@@ -4,7 +4,7 @@ import '@ton/test-utils';
 import {Factory} from "../wrappers/Factory";
 import {printTransactions} from "../wrappers/utils";
 import {VaultJetton} from "../wrappers/VaultJetton";
-import {CodeCells, compileCodes, deployJetton} from "./utils";
+import {CodeCells, compileCodes} from "./utils";
 import {JettonMaster, JettonWallet} from "../wrappers/Jetton";
 import {VaultNative} from "../wrappers/VaultNative";
 import {
@@ -17,6 +17,7 @@ import {
     PoolParams, SwapParams, SwapStepParams
 } from "../wrappers/types";
 import {VaultExtra} from "../wrappers/VaultExtra";
+import { deployJettonWithVault, deployNativeVault, JettonDataWithVault } from './helpers';
 
 /**
  * Набор тестов, покрывающих полный цикл взаимодействия юзера с протоколом
@@ -60,27 +61,23 @@ describe('Test', () => {
     let admin: SandboxContract<TreasuryContract>;
     let factory: SandboxContract<Factory>;
 
-    let jettonMaster1: SandboxContract<JettonMaster>;
-    let jettonMaster2: SandboxContract<JettonMaster>;
-    let jettonMaster3: SandboxContract<JettonMaster>;
-    let jettonMaster4: SandboxContract<JettonMaster>;
-    let vaultNative: SandboxContract<VaultNative>;
-    let vaultJetton1: SandboxContract<VaultJetton>;
-    let vaultJetton2: SandboxContract<VaultJetton>;
-    let vaultJetton3: SandboxContract<VaultJetton>;
-    let vaultJetton4: SandboxContract<VaultJetton>;
+    let jetton1: JettonDataWithVault
+    let jetton2: JettonDataWithVault
+    let jetton3: JettonDataWithVault
+    let jetton4: JettonDataWithVault
+    let nativeVault: SandboxContract<VaultNative>
 
     function resolveVault(type: VaultTypes): SandboxContract<VaultNative> | SandboxContract<VaultJetton> | SandboxContract<VaultExtra> {
         if (type == VaultTypes.NATIVE_VAULT) {
-            return vaultNative
+            return nativeVault
         } else if (type == VaultTypes.JETTON_VAULT_1) {
-            return vaultJetton1
+            return jetton1.vault
         } else if (type == VaultTypes.JETTON_VAULT_2) {
-            return vaultJetton2
+            return jetton2.vault
         } else if (type == VaultTypes.JETTON_VAULT_3) {
-            return vaultJetton3
+            return jetton3.vault
         } else if (type == VaultTypes.JETTON_VAULT_4) {
-            return vaultJetton4
+            return jetton4.vault
         } else {
             throw Error("Unknown type")
         }
@@ -263,78 +260,56 @@ describe('Test', () => {
         );
         await factory.sendDeploy(admin.getSender(), toNano(1.0));
 
-        let deploy = await deployJetton(blockchain, admin, "TST1");
-        jettonMaster1 = deploy.master;
-        deploy = await deployJetton(blockchain, admin, "TST2");
-        jettonMaster2 = deploy.master;
-        deploy = await deployJetton(blockchain, admin, "TST3");
-        jettonMaster3 = deploy.master;
-        deploy = await deployJetton(blockchain, admin, "TST4");
-        jettonMaster4 = deploy.master;
-
-        await factory.sendCreateVault(admin.getSender(), toNano(.04), null);
-        await factory.sendCreateVault(admin.getSender(), toNano(.04), jettonMaster1.address);
-        await factory.sendCreateVault(admin.getSender(), toNano(.04), jettonMaster2.address);
-        await factory.sendCreateVault(admin.getSender(), toNano(.04), jettonMaster3.address);
-        await factory.sendCreateVault(admin.getSender(), toNano(.04), jettonMaster4.address);
-
-        vaultNative = blockchain.openContract(VaultNative.createFromAddress(await factory.getVaultAddress(null)));
-        vaultJetton1 = blockchain.openContract(VaultJetton.createFromAddress(await factory.getVaultAddress(jettonMaster1.address)));
-        vaultJetton2 = blockchain.openContract(VaultJetton.createFromAddress(await factory.getVaultAddress(jettonMaster2.address)));
-        vaultJetton3 = blockchain.openContract(VaultJetton.createFromAddress(await factory.getVaultAddress(jettonMaster3.address)));
-        vaultJetton4 = blockchain.openContract(VaultJetton.createFromAddress(await factory.getVaultAddress(jettonMaster4.address)));
-
-        let adminJettonWallet1 = blockchain.openContract(
-            JettonWallet.createFromAddress(
-                await blockchain.openContract(
-                    JettonMaster.createFromAddress(jettonMaster1.address)).getWalletAddress(admin.address)
-            )
+        jetton1 = await deployJettonWithVault(
+            blockchain,
+            factory,
+            admin,
+            'TST1'
         )
-        let adminJettonWallet2 = blockchain.openContract(
-            JettonWallet.createFromAddress(
-                await blockchain.openContract(
-                    JettonMaster.createFromAddress(jettonMaster2.address)).getWalletAddress(admin.address)
-            )
+        jetton2 = await deployJettonWithVault(
+            blockchain,
+            factory,
+            admin,
+            'TST2'
         )
-
-        let adminJettonWallet3 = blockchain.openContract(
-            JettonWallet.createFromAddress(
-                await blockchain.openContract(
-                    JettonMaster.createFromAddress(jettonMaster3.address)).getWalletAddress(admin.address)
-            )
+        jetton3 = await deployJettonWithVault(
+            blockchain,
+            factory,
+            admin,
+            'TST3'
         )
-
-        let adminJettonWallet4 = blockchain.openContract(
-            JettonWallet.createFromAddress(
-                await blockchain.openContract(
-                    JettonMaster.createFromAddress(jettonMaster4.address)).getWalletAddress(admin.address)
-            )
+        jetton4 = await deployJettonWithVault(
+            blockchain,
+            factory,
+            admin,
+            'TST4'
         )
+        nativeVault = await deployNativeVault(blockchain, factory, admin)
 
         // native -> jetton1 volatile
         {
-            let txs = await adminJettonWallet1.sendCreatePoolJetton(admin.getSender(),
+            let txs = await jetton1.wallet.sendCreatePoolJetton(admin.getSender(),
                 toNano(1),
-                vaultJetton1.address,
+                jetton1.vault.address,
                 toNano(5),
                 admin.address,
                 new PoolParams(
                     AssetNative.INSTANCE,
-                    AssetJetton.fromAddress(jettonMaster1.address),
+                    AssetJetton.fromAddress(jetton1.master.address),
                     AMM.ConstantProduct
                 ),
                 null,
                 null
             )
             printTransactions(txs.transactions)
-            txs = await vaultNative.sendCreatePoolNative(
+            txs = await nativeVault.sendCreatePoolNative(
                 admin.getSender(),
                 toNano(6),
                 toNano(5),
                 admin.address,
                 new PoolParams(
                     AssetNative.INSTANCE,
-                    AssetJetton.fromAddress(jettonMaster1.address),
+                    AssetJetton.fromAddress(jetton1.master.address),
                     AMM.ConstantProduct
                 ),
                 null,
@@ -345,27 +320,27 @@ describe('Test', () => {
 
         // native -> jetton1 stable
         {
-            await adminJettonWallet1.sendCreatePoolJetton(admin.getSender(),
+            await jetton1.wallet.sendCreatePoolJetton(admin.getSender(),
                 toNano(1),
-                vaultJetton1.address,
+                jetton1.vault.address,
                 toNano(5),
                 admin.address,
                 new PoolParams(
                     AssetNative.INSTANCE,
-                    AssetJetton.fromAddress(jettonMaster1.address),
+                    AssetJetton.fromAddress(jetton1.master.address),
                     AMM.CurveFiStable
                 ),
                 beginCell().storeUint(2_000, 16).storeCoins(1).storeCoins(1).endCell(),
                 null
             )
-            await vaultNative.sendCreatePoolNative(
+            await nativeVault.sendCreatePoolNative(
                 admin.getSender(),
                 toNano(6),
                 toNano(5),
                 admin.address,
                 new PoolParams(
                     AssetNative.INSTANCE,
-                    AssetJetton.fromAddress(jettonMaster1.address),
+                    AssetJetton.fromAddress(jetton1.master.address),
                     AMM.CurveFiStable
                 ),
                 beginCell()
@@ -379,27 +354,27 @@ describe('Test', () => {
 
         // native -> jetton2 stable
         {
-            await adminJettonWallet2.sendCreatePoolJetton(admin.getSender(),
+            await jetton2.wallet.sendCreatePoolJetton(admin.getSender(),
                 toNano(1),
-                vaultJetton2.address,
+                jetton2.vault.address,
                 toNano(5),
                 admin.address,
                 new PoolParams(
                     AssetNative.INSTANCE,
-                    AssetJetton.fromAddress(jettonMaster2.address),
+                    AssetJetton.fromAddress(jetton2.master.address),
                     AMM.CurveFiStable
                 ),
                 beginCell().storeUint(2_000, 16).storeCoins(1).storeCoins(1).endCell(),
                 null
             )
-            await vaultNative.sendCreatePoolNative(
+            await nativeVault.sendCreatePoolNative(
                 admin.getSender(),
                 toNano(10),
                 toNano(9),
                 admin.address,
                 new PoolParams(
                     AssetNative.INSTANCE,
-                    AssetJetton.fromAddress(jettonMaster2.address),
+                    AssetJetton.fromAddress(jetton2.master.address),
                     AMM.CurveFiStable
                 ),
                 beginCell()
@@ -413,27 +388,27 @@ describe('Test', () => {
 
         // jetton1 -> jetton2 stable
         {
-            await adminJettonWallet1.sendCreatePoolJetton(admin.getSender(),
+            await jetton1.wallet.sendCreatePoolJetton(admin.getSender(),
                 toNano(1),
-                vaultJetton1.address,
+                jetton1.vault.address,
                 toNano(10),
                 admin.address,
                 new PoolParams(
-                    AssetJetton.fromAddress(jettonMaster1.address),
-                    AssetJetton.fromAddress(jettonMaster2.address),
+                    AssetJetton.fromAddress(jetton1.master.address),
+                    AssetJetton.fromAddress(jetton2.master.address),
                     AMM.CurveFiStable
                 ),
                 beginCell().storeUint(2_000, 16).storeCoins(1).storeCoins(1).endCell(),
                 null
             )
-            await adminJettonWallet2.sendCreatePoolJetton(admin.getSender(),
+            await jetton2.wallet.sendCreatePoolJetton(admin.getSender(),
                 toNano(1),
-                vaultJetton2.address,
+                jetton2.vault.address,
                 toNano(20),
                 admin.address,
                 new PoolParams(
-                    AssetJetton.fromAddress(jettonMaster1.address),
-                    AssetJetton.fromAddress(jettonMaster2.address),
+                    AssetJetton.fromAddress(jetton1.master.address),
+                    AssetJetton.fromAddress(jetton2.master.address),
                     AMM.CurveFiStable
                 ),
                 beginCell().storeUint(2_000, 16).storeCoins(1).storeCoins(1).endCell(),
@@ -443,27 +418,27 @@ describe('Test', () => {
 
         // jetton1 -> jetton2 volatile
         {
-            await adminJettonWallet1.sendCreatePoolJetton(admin.getSender(),
+            await jetton1.wallet.sendCreatePoolJetton(admin.getSender(),
                 toNano(1),
-                vaultJetton1.address,
+                jetton1.vault.address,
                 toNano(10),
                 admin.address,
                 new PoolParams(
-                    AssetJetton.fromAddress(jettonMaster1.address),
-                    AssetJetton.fromAddress(jettonMaster2.address),
+                    AssetJetton.fromAddress(jetton1.master.address),
+                    AssetJetton.fromAddress(jetton2.master.address),
                     AMM.ConstantProduct
                 ),
                 null,
                 null
             )
-            await adminJettonWallet2.sendCreatePoolJetton(admin.getSender(),
+            await jetton2.wallet.sendCreatePoolJetton(admin.getSender(),
                 toNano(1),
-                vaultJetton2.address,
+                jetton2.vault.address,
                 toNano(10),
                 admin.address,
                 new PoolParams(
-                    AssetJetton.fromAddress(jettonMaster1.address),
-                    AssetJetton.fromAddress(jettonMaster2.address),
+                    AssetJetton.fromAddress(jetton1.master.address),
+                    AssetJetton.fromAddress(jetton2.master.address),
                     AMM.ConstantProduct
                 ),
                 null,
@@ -473,27 +448,27 @@ describe('Test', () => {
 
         // jetton3 -> jetton4 stable
         {
-            await adminJettonWallet3.sendCreatePoolJetton(admin.getSender(),
+            await jetton3.wallet.sendCreatePoolJetton(admin.getSender(),
                 toNano(1),
-                vaultJetton3.address,
+                jetton3.vault.address,
                 toNano(10),
                 admin.address,
                 new PoolParams(
-                    AssetJetton.fromAddress(jettonMaster3.address),
-                    AssetJetton.fromAddress(jettonMaster4.address),
+                    AssetJetton.fromAddress(jetton3.master.address),
+                    AssetJetton.fromAddress(jetton4.master.address),
                     AMM.CurveFiStable
                 ),
                 beginCell().storeUint(2_000, 16).storeCoins(1).storeCoins(1).endCell(),
                 null
             )
-            await adminJettonWallet4.sendCreatePoolJetton(admin.getSender(),
+            await jetton4.wallet.sendCreatePoolJetton(admin.getSender(),
                 toNano(1),
-                vaultJetton4.address,
+                jetton4.vault.address,
                 toNano(20),
                 admin.address,
                 new PoolParams(
-                    AssetJetton.fromAddress(jettonMaster3.address),
-                    AssetJetton.fromAddress(jettonMaster4.address),
+                    AssetJetton.fromAddress(jetton3.master.address),
+                    AssetJetton.fromAddress(jetton4.master.address),
                     AMM.CurveFiStable
                 ),
                 beginCell().storeUint(2_000, 16).storeCoins(1).storeCoins(1).endCell(),
@@ -503,27 +478,27 @@ describe('Test', () => {
 
         // jetton3 -> jetton4 volatile
         {
-            await adminJettonWallet3.sendCreatePoolJetton(admin.getSender(),
+            await jetton3.wallet.sendCreatePoolJetton(admin.getSender(),
                 toNano(1),
-                vaultJetton3.address,
+                jetton3.vault.address,
                 toNano(10),
                 admin.address,
                 new PoolParams(
-                    AssetJetton.fromAddress(jettonMaster3.address),
-                    AssetJetton.fromAddress(jettonMaster4.address),
+                    AssetJetton.fromAddress(jetton3.master.address),
+                    AssetJetton.fromAddress(jetton4.master.address),
                     AMM.ConstantProduct
                 ),
                 null,
                 null
             )
-            await adminJettonWallet4.sendCreatePoolJetton(admin.getSender(),
+            await jetton4.wallet.sendCreatePoolJetton(admin.getSender(),
                 toNano(1),
-                vaultJetton4.address,
+                jetton4.vault.address,
                 toNano(10),
                 admin.address,
                 new PoolParams(
-                    AssetJetton.fromAddress(jettonMaster3.address),
-                    AssetJetton.fromAddress(jettonMaster4.address),
+                    AssetJetton.fromAddress(jetton3.master.address),
+                    AssetJetton.fromAddress(jetton4.master.address),
                     AMM.ConstantProduct
                 ),
                 null,
@@ -532,16 +507,16 @@ describe('Test', () => {
         }
 
         console.log('factory address:', factory.address.toRawString(), '\n',
-            'jettonMaster1:', jettonMaster1.address.toRawString(), '\n',
-            'jettonMaster2:', jettonMaster2.address.toRawString(), '\n',
-            'jettonMaster3:', jettonMaster3.address.toRawString(), '\n',
-            'jettonMaster4:', jettonMaster4.address.toRawString(), '\n',
+            'jettonMaster1:', jetton1.master.address.toRawString(), '\n',
+            'jettonMaster2:', jetton2.master.address.toRawString(), '\n',
+            'jettonMaster3:', jetton3.master.address.toRawString(), '\n',
+            'jettonMaster4:', jetton4.master.address.toRawString(), '\n',
 
-            'vaultNative:', vaultNative.address.toRawString(), '\n',
-            'vaultJetton2:', vaultJetton2.address.toRawString(), '\n',
-            'vaultJetton1:', vaultJetton1.address.toRawString(), '\n',
-            'vaultJetton3:', vaultJetton3.address.toRawString(), '\n',
-            'vaultJetton4:', vaultJetton4.address.toRawString(), '\n',
+            'vaultNative:', nativeVault.address.toRawString(), '\n',
+            'vaultJetton1:', jetton1.vault.address.toRawString(), '\n',
+            'vaultJetton2:', jetton2.vault.address.toRawString(), '\n',
+            'vaultJetton3:', jetton3.vault.address.toRawString(), '\n',
+            'vaultJetton4:', jetton4.vault.address.toRawString(), '\n',
         );
 
     });

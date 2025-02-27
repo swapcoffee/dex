@@ -3,7 +3,7 @@ import {Address, beginCell, toNano} from '@ton/core';
 import '@ton/test-utils';
 import {Factory} from "../wrappers/Factory";
 import {VaultJetton} from "../wrappers/VaultJetton";
-import {CodeCells, compileCodes, deployJetton} from "./utils";
+import {CodeCells, compileCodes} from "./utils";
 import {JettonMaster, JettonWallet} from "../wrappers/Jetton";
 import {VaultNative} from "../wrappers/VaultNative";
 import {
@@ -14,6 +14,7 @@ import {
     PoolParams, SwapParams, SwapStepParams
 } from "../wrappers/types";
 import {VaultExtra} from "../wrappers/VaultExtra";
+import { deployJettonWithVault, deployNativeVault, JettonDataWithVault } from './helpers';
 
 describe('Test', () => {
     let codeCells: CodeCells;
@@ -25,9 +26,8 @@ describe('Test', () => {
     let admin: SandboxContract<TreasuryContract>;
     let factory: SandboxContract<Factory>;
 
-    let jettonMaster1: SandboxContract<JettonMaster>;
-    let vaultNative: SandboxContract<VaultNative>;
-    let vaultJetton1: SandboxContract<VaultJetton>;
+    let jetton1: JettonDataWithVault
+    let nativeVault: SandboxContract<VaultNative>
 
     async function doSwap(
         sender: SandboxContract<TreasuryContract>,
@@ -88,34 +88,26 @@ describe('Test', () => {
         );
         await factory.sendDeploy(admin.getSender(), toNano(1.0));
 
-        let deploy = await deployJetton(blockchain, admin, "TST1");
-        jettonMaster1 = deploy.master;
-
-        await factory.sendCreateVault(admin.getSender(), toNano(.04), null);
-        await factory.sendCreateVault(admin.getSender(), toNano(.04), jettonMaster1.address);
+        jetton1 = await deployJettonWithVault(
+            blockchain,
+            factory,
+            admin,
+            'TST1'
+        )
+        nativeVault = await deployNativeVault(blockchain, factory, admin)
     }
 
     async function initPool(first_normalizer: number, second_normalizer: number, first_asset: bigint, second_asset: bigint) {
-        vaultNative = blockchain.openContract(VaultNative.createFromAddress(await factory.getVaultAddress(null)));
-        vaultJetton1 = blockchain.openContract(VaultJetton.createFromAddress(await factory.getVaultAddress(jettonMaster1.address)));
-
-        let adminJettonWallet1 = blockchain.openContract(
-            JettonWallet.createFromAddress(
-                await blockchain.openContract(
-                    JettonMaster.createFromAddress(jettonMaster1.address)).getWalletAddress(admin.address)
-            )
-        )
-
         // native -> jetton1 stable
         {
-            await vaultNative.sendCreatePoolNative(
+            await nativeVault.sendCreatePoolNative(
                 admin.getSender(),
                 toNano(1) + first_asset,
                 first_asset,
                 admin.address,
                 new PoolParams(
                     AssetNative.INSTANCE,
-                    AssetJetton.fromAddress(jettonMaster1.address),
+                    AssetJetton.fromAddress(jetton1.master.address),
                     AMM.CurveFiStable
                 ),
                 beginCell()
@@ -126,14 +118,14 @@ describe('Test', () => {
                 null
             )
 
-            await adminJettonWallet1.sendCreatePoolJetton(admin.getSender(),
+            await jetton1.wallet.sendCreatePoolJetton(admin.getSender(),
                 toNano(1),
-                vaultJetton1.address,
+                jetton1.vault.address,
                 second_asset,
                 admin.address,
                 new PoolParams(
                     AssetNative.INSTANCE,
-                    AssetJetton.fromAddress(jettonMaster1.address),
+                    AssetJetton.fromAddress(jetton1.master.address),
                     AMM.CurveFiStable
                 ),
                 beginCell().storeUint(2_000, 16).storeCoins(first_normalizer).storeCoins(second_normalizer).endCell(),
@@ -149,25 +141,17 @@ describe('Test', () => {
         let pool = blockchain.openContract(
             await factory.getPoolJettonBased(
                 AssetNative.INSTANCE,
-                AssetJetton.fromAddress(jettonMaster1.address),
+                AssetJetton.fromAddress(jetton1.master.address),
                 AMM.CurveFiStable
             )
         );
-        vaultNative = blockchain.openContract(VaultNative.createFromAddress(await factory.getVaultAddress(null)));
-        vaultJetton1 = blockchain.openContract(VaultJetton.createFromAddress(await factory.getVaultAddress(jettonMaster1.address)));
-
-        let wallet = blockchain.openContract(
-            JettonWallet.createFromAddress(
-                await jettonMaster1.getWalletAddress(admin.address)
-            )
-        );
-        let before = await wallet.getWalletBalance();
+        let before = await jetton1.wallet.getWalletBalance();
 
         let txs = await doSwap(admin,
-            vaultNative,
+            nativeVault,
             1000n,
             new SwapStepParams(
-                await factory.getPoolAddressHash(await vaultNative.getAsset(), await vaultJetton1.getAsset(), AMM.CurveFiStable),
+                await factory.getPoolAddressHash(await nativeVault.getAsset(), await jetton1.vault.getAsset(), AMM.CurveFiStable),
                 0n,
                 null
             ),
@@ -180,11 +164,11 @@ describe('Test', () => {
         );
         expect(txs.transactions).toHaveTransaction({
             from: pool.address,
-            to: vaultJetton1.address,
+            to: jetton1.vault.address,
             success: true,
             exitCode: 0
         })
-        let after = await wallet.getWalletBalance();
+        let after = await jetton1.wallet.getWalletBalance();
 
         console.log(after - before);
         expect(after - before).toBe(1607n);
@@ -197,25 +181,17 @@ describe('Test', () => {
         let pool = blockchain.openContract(
             await factory.getPoolJettonBased(
                 AssetNative.INSTANCE,
-                AssetJetton.fromAddress(jettonMaster1.address),
+                AssetJetton.fromAddress(jetton1.master.address),
                 AMM.CurveFiStable
             )
         );
-        vaultNative = blockchain.openContract(VaultNative.createFromAddress(await factory.getVaultAddress(null)));
-        vaultJetton1 = blockchain.openContract(VaultJetton.createFromAddress(await factory.getVaultAddress(jettonMaster1.address)));
-
-        let wallet = blockchain.openContract(
-            JettonWallet.createFromAddress(
-                await jettonMaster1.getWalletAddress(admin.address)
-            )
-        );
-        let before = await wallet.getWalletBalance();
+        let before = await jetton1.wallet.getWalletBalance();
 
         let txs = await doSwap(admin,
-            vaultNative,
+            nativeVault,
             1000n,
             new SwapStepParams(
-                await factory.getPoolAddressHash(await vaultNative.getAsset(), await vaultJetton1.getAsset(), AMM.CurveFiStable),
+                await factory.getPoolAddressHash(await nativeVault.getAsset(), await jetton1.vault.getAsset(), AMM.CurveFiStable),
                 0n,
                 null
             ),
@@ -228,11 +204,11 @@ describe('Test', () => {
         );
         expect(txs.transactions).toHaveTransaction({
             from: pool.address,
-            to: vaultJetton1.address,
+            to: jetton1.vault.address,
             success: true,
             exitCode: 0
         })
-        let after = await wallet.getWalletBalance();
+        let after = await jetton1.wallet.getWalletBalance();
 
         console.log(after - before);
         expect(after - before).toBe(989764n);
@@ -245,19 +221,16 @@ describe('Test', () => {
         let pool = blockchain.openContract(
             await factory.getPoolJettonBased(
                 AssetNative.INSTANCE,
-                AssetJetton.fromAddress(jettonMaster1.address),
+                AssetJetton.fromAddress(jetton1.master.address),
                 AMM.CurveFiStable
             )
         );
-        vaultNative = blockchain.openContract(VaultNative.createFromAddress(await factory.getVaultAddress(null)));
-        vaultJetton1 = blockchain.openContract(VaultJetton.createFromAddress(await factory.getVaultAddress(jettonMaster1.address)));
-
 
         let txs = await doSwap(admin,
-            vaultJetton1,
+            jetton1.vault,
             1000n,
             new SwapStepParams(
-                await factory.getPoolAddressHash(await vaultNative.getAsset(), await vaultJetton1.getAsset(), AMM.CurveFiStable),
+                await factory.getPoolAddressHash(await nativeVault.getAsset(), await jetton1.vault.getAsset(), AMM.CurveFiStable),
                 0n,
                 null
             ),
@@ -270,7 +243,7 @@ describe('Test', () => {
         );
         expect(txs.transactions).toHaveTransaction({
             from: pool.address,
-            to: vaultNative.address,
+            to: nativeVault.address,
             success: true,
             exitCode: 0,
             body: beginCell()
@@ -282,8 +255,8 @@ describe('Test', () => {
                 .storeMaybeRef(
                     beginCell().storeAddress(factory.address)
                         .storeUint(1, 2)
-                        .storeSlice(await vaultNative.getAsset())
-                        .storeSlice(await vaultJetton1.getAsset())
+                        .storeSlice(await nativeVault.getAsset())
+                        .storeSlice(await jetton1.vault.getAsset())
                         .storeUint(1, 3)
                 )
                 .endCell()
@@ -297,18 +270,16 @@ describe('Test', () => {
         let pool = blockchain.openContract(
             await factory.getPoolJettonBased(
                 AssetNative.INSTANCE,
-                AssetJetton.fromAddress(jettonMaster1.address),
+                AssetJetton.fromAddress(jetton1.master.address),
                 AMM.CurveFiStable
             )
         );
-        vaultNative = blockchain.openContract(VaultNative.createFromAddress(await factory.getVaultAddress(null)));
-        vaultJetton1 = blockchain.openContract(VaultJetton.createFromAddress(await factory.getVaultAddress(jettonMaster1.address)));
 
         let txs = await doSwap(admin,
-            vaultJetton1,
+            jetton1.vault,
             1000n,
             new SwapStepParams(
-                await factory.getPoolAddressHash(await vaultNative.getAsset(), await vaultJetton1.getAsset(), AMM.CurveFiStable),
+                await factory.getPoolAddressHash(await nativeVault.getAsset(), await jetton1.vault.getAsset(), AMM.CurveFiStable),
                 0n,
                 null
             ),
@@ -322,7 +293,7 @@ describe('Test', () => {
 
         expect(txs.transactions).toHaveTransaction({
             from: pool.address,
-            to: vaultNative.address,
+            to: nativeVault.address,
             success: true,
             exitCode: 0,
             body: beginCell()
@@ -334,8 +305,8 @@ describe('Test', () => {
                 .storeMaybeRef(
                     beginCell().storeAddress(factory.address)
                         .storeUint(1, 2)
-                        .storeSlice(await vaultNative.getAsset())
-                        .storeSlice(await vaultJetton1.getAsset())
+                        .storeSlice(await nativeVault.getAsset())
+                        .storeSlice(await jetton1.vault.getAsset())
                         .storeUint(1, 3)
                 )
                 .endCell()

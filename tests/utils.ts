@@ -78,31 +78,6 @@ export async function compileWrappers() {
     }
 }
 
-export async function deployJetton(blockchain: Blockchain,
-                                   deployer: SandboxContract<TreasuryContract>,
-                                   token: string, isNoResolver = false) {
-    let jettonMaster;
-    if(isNoResolver) {
-        jettonMaster = blockchain.openContract(
-            JettonMaster.createFromConfigNoResolver({owner: deployer.address, name: token})
-        );
-    } else {
-        jettonMaster = blockchain.openContract(
-        JettonMaster.createFromConfig({owner: deployer.address, name: token})
-    );
-    }
-    await jettonMaster.sendDeploy(deployer.getSender(), toNano(1.0));
-    let res = await jettonMaster.sendMint(deployer.getSender(), toNano(.05), deployer.address, toNano(100.0));
-    const jettonWallet = blockchain.openContract(
-        JettonWallet.createFromAddress(getTransactionAccount(res.transactions[2])!)
-    );
-    console.log("Jetton master deployed, address:", jettonMaster.address.toRawString(), "owner:", deployer.address, "name:", token);
-    return {
-        master: jettonMaster,
-        jettonWallet: jettonWallet
-    };
-}
-
 export type ExternalMatch = {
     dest?: bigint,
     body?: Cell
