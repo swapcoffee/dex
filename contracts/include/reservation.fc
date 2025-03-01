@@ -1,0 +1,41 @@
+#include "gas.fc";
+#include "stdlib.fc";
+
+const int RESERVE_EXACTLY = 0;
+const int RESERVE_ALL_EXCEPT = 1;
+const int RESERVE_AT_MOST = 2;
+const int RESERVE_BALANCE_INCREASED = 4;
+const int RESERVE_BALANCE_DECREASED = 12;
+const int RESERVE_BOUNCE_ON_ACTION_FAIL = 16;
+
+;; 0 = RESERVE_EXACTLY                                                      = value
+;; 1 = RESERVE_ALL_EXCEPT                                                   = remaining_balance - value
+;; 2 = RESERVE_AT_MOST                                                      = min(value, remaining_balance)
+;; 3 = RESERVE_AT_MOST | RESERVE_ALL_EXCEPT                                 = remaining_balance - min(value, remaining_balance)
+;; 4 = RESERVE_BALANCE_INCREASED                                            = original_balance + value
+;; 5 = RESERVE_BALANCE_INCREASED | RESERVE_ALL_EXCEPT                       = remaining_balance - (original_balance + value)
+;; 6 = RESERVE_BALANCE_INCREASED | RESERVE_AT_MOST                          = min(original_balance + value, remaining_balance) = remaining_balance
+;; 7 = RESERVE_BALANCE_INCREASED | RESERVE_AT_MOST | RESERVE_ALL_EXCEPT     = remaining_balance - min(original_balance + value, remaining_balance)
+;; 12 = RESERVE_BALANCE_DECREASED                                           = original_balance - value
+;; 13 = RESERVE_BALANCE_DECREASED | RESERVE_ALL_EXCEPT                      = remaining_balance - (original_balance - value)
+;; 14 = RESERVE_BALANCE_DECREASED | RESERVE_AT_MOST                         = min(original_balance - value, remaining_balance)
+;; 15 = RESERVE_BALANCE_DECREASED | RESERVE_AT_MOST | RESERVE_ALL_EXCEPT    = remaining_balance - min(original_balance - value, remaining_balance)
+
+;; For some reason both BALANCE_INCREASED and BALANCE_DECREASED work poorly with nearly-zero balances
+;; (VM signals about invalid actions, because contract's retrieved original balance is "invalid-cc"),
+;; that's why we're using RESERVE_EXACTLY instead.
+
+int get_incoming_value_minus_storage_fees() asm "INCOMINGVALUE FIRST STORAGEFEES SUB";
+
+;; pair_first(get_balance()) + get_storage_fees() - get_incoming_value()
+int get_original_balance() asm "BALANCE FIRST STORAGEFEES ADD INCOMINGVALUE FIRST SUB";
+
+() reserve_for_carry_inbound_without_value() impure inline {
+    raw_reserve(get_original_balance(), RESERVE_EXACTLY);
+}
+
+;; positive value = DEX pays to user
+;; negative value = user leaves his currency on DEX
+() reserve_for_carry_inbound_with_value(int value) impure inline {
+    raw_reserve(get_original_balance() - value, RESERVE_EXACTLY);
+}

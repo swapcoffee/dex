@@ -1,10 +1,11 @@
 import {Blockchain, SandboxContract, TreasuryContract} from '@ton/sandbox';
-import {Cell, toNano} from '@ton/core';
+import {toNano} from '@ton/core';
 import '@ton/test-utils';
 import {Factory} from "../wrappers/Factory";
 import {printTransactions} from "../wrappers/utils";
 import {VaultJetton} from "../wrappers/VaultJetton";
-import {CodeCells, compileCodes, deployJetton, lpWalletCode} from "./utils";
+import {CodeCells, compileCodes} from "./utils";
+import { deployJettonWithoutVault } from './helpers';
 
 describe('Test', () => {
     let codeCells: CodeCells;
@@ -28,12 +29,15 @@ describe('Test', () => {
     });
 
     it('deploy vault for token without wallet resolver', async () => {
-        let deploy = await deployJetton(blockchain, admin, "TST", true);
-        const jettonMaster = deploy.master;
-
-        let res = await factory.sendCreateVault(admin.getSender(), toNano(.04), jettonMaster.address);
+        const jetton = await deployJettonWithoutVault(
+            blockchain,
+            admin,
+            'TST',
+            true
+        )
+        let res = await factory.sendCreateVault(admin.getSender(), toNano(.04), jetton.master.address);
         const vaultJetton = blockchain.openContract(
-            VaultJetton.createFromAddress(await factory.getVaultAddress(jettonMaster.address))
+            VaultJetton.createFromAddress(await factory.getVaultAddress(jetton.master.address))
         );
         expect(res.transactions).toHaveTransaction({
             from: admin.address,
@@ -49,13 +53,13 @@ describe('Test', () => {
         });
         expect(res.transactions).toHaveTransaction({
             from: vaultJetton.address,
-            to: jettonMaster.address,
+            to: jetton.master.address,
             success: false,
             exitCode: 65535,
             op: 0x2c76b973
         });
         expect(await vaultJetton.getIsActive()).toBe(0n);
-        res = await factory.sendActivateVault(admin.getSender(), toNano(1.0), jettonMaster.address, vaultJetton.address);
+        res = await factory.sendActivateVault(admin.getSender(), toNano(1.0), jetton.master.address, vaultJetton.address);
         printTransactions(res.transactions);
         expect(res.transactions).toHaveTransaction({
             from: factory.address,

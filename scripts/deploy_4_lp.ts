@@ -48,9 +48,9 @@ async function sendMessage(
         if (depositOrProvide == DepositOrProvide.CREATE_LP) {
             await vault.sendCreatePoolNative(
                 provider.sender(),
-                toNano('0.1') + asset1,
+                toNano(0.1) + asset1,
                 asset1,
-                provider.sender().address,
+                provider.sender().address!!,
                 new PoolParams(Asset.fromAny(token1), Asset.fromAny(token2), amm),
                 ammSettings,
                 null,
@@ -58,7 +58,7 @@ async function sendMessage(
         } else {
             await vault.sendDepositLiquidityNative(
                 provider.sender(),
-                toNano('0.1') + asset1,
+                toNano(0.1) + asset1,
                 asset1,
                 new DepositLiquidityParams(
                     new DepositLiquidityParamsTrimmed(BigInt((1 << 30) * 2), 0n, null, null, null),
@@ -78,10 +78,10 @@ async function sendMessage(
         if (depositOrProvide == DepositOrProvide.CREATE_LP) {
             await wallet.sendCreatePoolJetton(
                 provider.sender(),
-                toNano('0.1'),
+                toNano(0.1),
                 vault,
                 asset1,
-                provider.sender().address,
+                provider.sender().address!!,
                 new PoolParams(Asset.fromAny(token1), Asset.fromAny(token2), amm),
                 ammSettings,
                 null,
@@ -89,7 +89,7 @@ async function sendMessage(
         } else {
             await wallet.sendDepositLiquidityJetton(
                 provider.sender(),
-                toNano('0.1'),
+                toNano(0.1),
                 vault,
                 asset1,
                 new DepositLiquidityParams(

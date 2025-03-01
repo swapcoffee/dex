@@ -2,7 +2,7 @@
 #include "math.fc";
 #include "constants.fc";
 #include "messages.fc";
-
+#include "reservation.fc";
 
 const int contract_type::vault = 0;
 const int contract_type::pool = 1;
@@ -270,12 +270,12 @@ builder build_payout_internal_body(int query_id, slice recipient, int amount, ce
     ifnot (cell_null?(data)) {
         set_data(data);
     }
-    send_small_builder_carry_inbound(
+    send_builder(
         excesses_receiver,
-        0,
         begin_cell()
             .store_uint(opcodes::excesses, 32)
-            .store_uint(query_id, 64)
+            .store_uint(query_id, 64),
+        SEND_MODE_CARRY_ALL_BALANCE
     );
 }
 

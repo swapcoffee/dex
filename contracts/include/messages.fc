@@ -1,6 +1,7 @@
 #include "gas.fc";
 #include "math.fc";
 #include "stdlib.fc";
+#include "reservation.fc";
 
 const int opcodes::transfer = 0xf8a7ea5;
 const int opcodes::transfer_notification = 0x7362d09c;
@@ -9,6 +10,9 @@ const int opcodes::internal_transfer = 0x178d4519;
 const int opcodes::excesses = 0xd53276db;
 const int opcodes::provide_wallet_address = 0x2c76b973;
 const int opcodes::take_wallet_address = 0xd1735400;
+const int opcodes::unknown = 0xffffffff;
+
+const int store_coins_zero_bits = 4;
 
 {-
 message$_ {X:Type} info:CommonMsgInfo
@@ -51,119 +55,36 @@ max coins = 1329227995784915872903807060280344575
     );
 }
 
-() send_builder(slice destination, int value, builder body, int mode) impure inline {
-    builder msg = begin_cell()
-        .store_uint(NON_BOUNCEABLE, 6)
-        .store_slice(destination)
-        .store_coins(value);
-    if (msg.builder_bits() + body.builder_bits() > 916) {
-        msg = msg.store_uint(1, 107).store_ref(body.end_cell());
-    } else {
-        msg = msg.store_uint(0, 107).store_builder(body);
-    }
-    send_raw_message(msg.end_cell(), mode);
-}
-
-int send_hash_builder(int destination_hash, int value, builder body, int mode) impure inline {
-    builder msg = begin_cell()
-        .store_uint(33792, 17) ;; NON_BOUNCEABLE, BASECHAIN
-        .store_uint(destination_hash, 256)
-        .store_coins(value);
-    if (msg.builder_bits() + body.builder_bits() > 916) {
-        msg = msg.store_uint(1, 107).store_ref(body.end_cell());
-    } else {
-        msg = msg.store_uint(0, 107).store_builder(body);
-    }
-    return send_message(msg.end_cell(), mode);
-}
-
-;; small = at most 519 bits
-() send_hash_small_builder(int destination_hash, int value, builder body) impure inline {
-    cell msg = begin_cell()
-        .store_uint(33792, 17) ;; NON_BOUNCEABLE, BASECHAIN
-        .store_uint(destination_hash, 256)
-        .store_coins(value)
-        .store_uint(0, 107)
-        .store_builder(body)
-        .end_cell();
-    send_raw_message(msg, SEND_MODE_REGULAR);
-}
-
-() send_small_builder_extra(slice destination, int value, cell extra, builder body, int mode) impure inline {
+;; at most 519 bits
+() send_builder(slice destination, builder body, int mode) impure inline {
     cell msg = begin_cell()
         .store_uint(NON_BOUNCEABLE, 6)
         .store_slice(destination)
-        .store_coins(value)
-        .store_dict(extra)
-        .store_uint(0, 106)
+        .store_uint(0, 107 + store_coins_zero_bits)
         .store_builder(body)
         .end_cell();
     send_raw_message(msg, mode);
 }
 
-() send_cell_carry_inbound(slice destination, int value, cell body) impure inline {
-    value += get_incoming_value() - get_storage_fees();
-    ;; 862 for execution before send_raw_message
-    ;; 651 = 526 for send_raw_message + 125 for new action installation
-    ;; up to 50 for implicit return invocations
-    value -= get_compute_fee(BASECHAIN, 862 + 651 + 50 + gas_consumed());
-    cell msg = begin_cell()
-        .store_uint(NON_BOUNCEABLE, 6)
-        .store_slice(destination)
-        .store_coins(value)
-        .store_uint(1, 107)
-        .store_ref(body)
-        .end_cell();
-    send_raw_message(msg, SEND_MODE_REGULAR);
-}
-
-;; small = at most 519 bits
-() send_small_builder_carry_inbound(slice destination, int value, builder body) impure inline {
-    value += get_incoming_value() - get_storage_fees();
-    value -= get_compute_fee(BASECHAIN, 888 + 651 + 50 + gas_consumed());
-    cell msg = begin_cell()
-        .store_uint(NON_BOUNCEABLE, 6)
-        .store_slice(destination)
-        .store_coins(value)
-        .store_uint(0, 107)
-        .store_builder(body)
-        .end_cell();
-    send_raw_message(msg, SEND_MODE_REGULAR);
-}
-
-;; small = at most 519 bits
-() send_hash_small_builder_carry_inbound(int destination_hash, int value, builder body) impure inline {
-    value += get_incoming_value() - get_storage_fees();
-    value -= get_compute_fee(BASECHAIN, 877 + 651 + 50 + gas_consumed());
-    cell msg = begin_cell()
+;; at most 519 bits
+() send_hash_builder(int destination_hash, int value, builder body, int mode) impure inline {
+    builder msg = begin_cell()
         .store_uint(33792, 17) ;; NON_BOUNCEABLE, BASECHAIN
         .store_uint(destination_hash, 256)
         .store_coins(value)
         .store_uint(0, 107)
-        .store_builder(body)
-        .end_cell();
-    send_raw_message(msg, SEND_MODE_REGULAR);
+        .store_builder(body);
+    send_raw_message(msg.end_cell(), mode);
 }
 
-int send_hash_builder_carry_inbound(int destination_hash, int value, builder body) impure inline {
-    value += get_incoming_value() - get_storage_fees();
-    builder msg = begin_cell()
-        .store_uint(33792, 17) ;; NON_BOUNCEABLE, BASECHAIN
-        .store_uint(destination_hash, 256);
-    if (ubitsize(value) + body.builder_bits() > 639) {
-        value -= get_compute_fee(BASECHAIN, 1299 + 651 + 50 + gas_consumed());
-        msg = msg
-            .store_coins(value)
-            .store_uint(1, 107)
-            .store_ref(body.end_cell());
-    } else {
-        value -= get_compute_fee(BASECHAIN, 807 + 651 + 50 + gas_consumed());
-        msg = msg
-            .store_coins(value)
-            .store_uint(0, 107)
-            .store_builder(body);
-    }
-    return send_message(msg.end_cell(), SEND_MODE_REGULAR);
+() send_cell_carry_inbound(slice destination, cell body) impure inline {
+    cell msg = begin_cell()
+        .store_uint(NON_BOUNCEABLE, 6)
+        .store_slice(destination)
+        .store_uint(1, 107 + store_coins_zero_bits)
+        .store_ref(body)
+        .end_cell();
+    send_raw_message(msg, SEND_MODE_CARRY_ALL_BALANCE);
 }
 
 () send_cell_extra_carry_inbound(slice destination, int extra_id, int extra_amount, cell body) impure inline {
@@ -171,120 +92,82 @@ int send_hash_builder_carry_inbound(int destination_hash, int value, builder bod
     slice extra_amount_slice = begin_cell().store_coins(extra_amount).end_cell().begin_parse();
     extra_dict~udict_set(32, extra_id, extra_amount_slice);
 
-    int value = get_incoming_value() - get_storage_fees();
-    value -= get_compute_fee(BASECHAIN, 906 + 651 + 50 + gas_consumed());
     cell msg = begin_cell()
         .store_uint(NON_BOUNCEABLE, 6)
         .store_slice(destination)
-        .store_coins(value)
+        .store_coins(0)
         .store_dict(extra_dict)
         .store_uint(1, 106)
         .store_ref(body)
         .end_cell();
-    send_raw_message(msg, SEND_MODE_REGULAR);
+    send_raw_message(msg, SEND_MODE_CARRY_ALL_BALANCE);
 }
 
-;; small = at most 519 bits and 3 refs
-() send_small_builder_extra_carry_inbound(slice destination, int value, int extra_id, int extra_amount, builder body) impure inline {
+;; at most 519 bits and 3 refs
+() send_builder_extra_carry_inbound(slice destination, int extra_id, int extra_amount, builder body) impure inline {
     cell extra_dict = new_dict();
     slice extra_amount_slice = begin_cell().store_coins(extra_amount).end_cell().begin_parse();
     extra_dict~udict_set(32, extra_id, extra_amount_slice);
 
-    value += get_incoming_value() - get_storage_fees();
-    value -= get_compute_fee(BASECHAIN, 932 + 651 + 50 + gas_consumed());
     cell msg = begin_cell()
         .store_uint(NON_BOUNCEABLE, 6)
         .store_slice(destination)
-        .store_coins(value)
+        .store_coins(0)
         .store_dict(extra_dict)
         .store_uint(0, 106)
         .store_builder(body)
         .end_cell();
-    send_raw_message(msg, SEND_MODE_REGULAR);
+    send_raw_message(msg, SEND_MODE_CARRY_ALL_BALANCE);
 }
 
-;; small = at most 519 bits and 3 refs
-() send_small_builder_extra_carry_inbound2(slice destination, int value, cell extra_dict, builder body) impure inline {
-    value += get_incoming_value() - get_storage_fees();
-    value -= get_compute_fee(BASECHAIN, 932 + 651 + 50 + gas_consumed());
-    cell msg = begin_cell()
-        .store_uint(NON_BOUNCEABLE, 6)
-        .store_slice(destination)
-        .store_coins(value)
-        .store_dict(extra_dict)
-        .store_uint(0, 106)
-        .store_builder(body)
-        .end_cell();
-    send_raw_message(msg, SEND_MODE_REGULAR);
-}
-
-;; small = at most 518 bits and 3 refs
-() send_hash_cell_init_carry_inbound(int destination_hash, int value, cell body, cell init) impure inline_ref {
-    value += get_incoming_value() - get_storage_fees();
-    value -= get_compute_fee(BASECHAIN, 869 + 651 + 50 + gas_consumed());
+() send_hash_cell_init_carry_inbound(int destination_hash, cell body, cell init) impure inline_ref {
     cell msg = begin_cell()
         .store_uint(33792, 17) ;; NON_BOUNCEABLE, BASECHAIN
         .store_uint(destination_hash, 256)
-        .store_coins(value)
-        .store_uint(7, 108)
+        .store_uint(7, 108 + store_coins_zero_bits)
         .store_ref(init)
+        .store_ref(body)
+        .end_cell();
+    send_raw_message(msg, SEND_MODE_CARRY_ALL_BALANCE);
+}
+
+;; at most 518 bits and 3 refs
+() send_hash_builder_init_carry_inbound(int destination_hash, builder body, cell init) impure inline_ref {
+    cell msg = begin_cell()
+        .store_uint(33792, 17) ;; NON_BOUNCEABLE, BASECHAIN
+        .store_uint(destination_hash, 256)
+        .store_uint(6, 108 + store_coins_zero_bits)
+        .store_ref(init)
+        .store_builder(body)
+        .end_cell();
+    send_raw_message(msg, SEND_MODE_CARRY_ALL_BALANCE);
+}
+
+;; at most 919 bits and 3 refs
+() send_event_builder(builder body) impure inline {
+    cell msg = begin_cell()
+        ;; 6 = ext_out_msg_info$11 addr_none$00 addr_none$00
+        ;; 98 = created_lt:uint64 created_at:uint32 maybe=0 either=0/1
+        .store_uint(0x30 << 98, 6 + 98)
+        .store_builder(body)
+        .end_cell();
+    send_raw_message(msg, SEND_MODE_REGULAR);
+}
+
+() send_event_cell(cell body) impure inline {
+    cell msg = begin_cell()
+        ;; 6 = ext_out_msg_info$11 addr_none$00 addr_none$00
+        ;; 98 = created_lt:uint64 created_at:uint32 maybe=0 either=0/1
+        .store_uint((0x30 << 98) + 1, 6 + 98)
         .store_ref(body)
         .end_cell();
     send_raw_message(msg, SEND_MODE_REGULAR);
 }
 
-;; small = at most 518 bits and 3 refs
-() send_hash_small_builder_init_carry_inbound(int destination_hash, builder body, cell init) impure inline_ref {
-    int value = get_incoming_value() - get_storage_fees();
-    value -= get_compute_fee(BASECHAIN, 895 + 651 + 50 + gas_consumed());
-    cell msg = begin_cell()
-        .store_uint(33792, 17) ;; NON_BOUNCEABLE, BASECHAIN
-        .store_uint(destination_hash, 256)
-        .store_coins(value)
-        .store_uint(6, 108)
-        .store_ref(init)
-        .store_builder(body)
-        .end_cell();
-    send_raw_message(msg, SEND_MODE_REGULAR);
-}
-
-;; () send_cell_init_carry_inbound(slice destination, int value, cell body, cell init) impure inline {
-;;     value += get_incoming_value() - get_storage_fees();
-;;     value -= get_compute_fee(BASECHAIN, 880 + 651 + 50 + gas_consumed());
-;;     cell msg = begin_cell()
-;;         .store_uint(NON_BOUNCEABLE, 6)
-;;         .store_slice(destination)
-;;         .store_coins(value)
-;;         .store_uint(7, 108)
-;;         .store_ref(init)
-;;         .store_ref(body)
-;;         .end_cell();
-;;     send_raw_message(msg, SEND_MODE_REGULAR);
-;; }
-;;
-;; ;; small = at most 518 bits and 3 refs
-;; () send_small_builder_init_carry_inbound(slice destination, int value, builder body, cell init) impure inline {
-;;     value += get_incoming_value() - get_storage_fees();
-;;     value -= get_compute_fee(BASECHAIN, 906 + 651 + 50 + gas_consumed());
-;;     cell msg = begin_cell()
-;;         .store_uint(NON_BOUNCEABLE, 6)
-;;         .store_slice(destination)
-;;         .store_coins(value)
-;;         .store_uint(6, 108)
-;;         .store_ref(init)
-;;         .store_builder(body)
-;;         .end_cell();
-;;     send_raw_message(msg, SEND_MODE_REGULAR);
-;; }
-
-int send_event(builder body) impure inline {
-    ;; ext_out_msg_info$11 addr_none$00 addr_none$00
-    builder msg = begin_cell().store_uint(0x30, 6);
-    ;; created_lt:uint64 created_at:uint32 maybe=0 either=0/1
+() send_event(builder body) impure inline {
     if (body.builder_bits() > 919) {
-        msg = msg.store_uint(1, 98).store_ref(body.end_cell());
+        send_event_cell(body.end_cell());
     } else {
-        msg = msg.store_uint(0, 98).store_builder(body);
+        send_event_builder(body);
     }
-    return send_message(msg.end_cell(), SEND_MODE_REGULAR);
 }

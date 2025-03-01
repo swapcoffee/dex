@@ -2,6 +2,7 @@
 #include "include/constants.fc";
 #include "include/messages.fc";
 #include "include/gas.fc";
+#include "include/reservation.fc";
 #include "include/stdlib.fc";
 
 global slice storage::admin_address;
@@ -73,6 +74,7 @@ global cell storage::pool_creator_code_cell;
     };; <=> check 0xffffffff
 
     load_data();
+    reserve_for_carry_inbound_without_value();
 
     slice sender_address = cs~load_msg_addr();
     force_chain(sender_address);
@@ -102,7 +104,7 @@ global cell storage::pool_creator_code_cell;
         cell state_init = gen_contract_state_init(storage::init_code_cell, init_data);
         int destination_hash = cell_hash(state_init);
 
-        send_hash_small_builder_init_carry_inbound(
+        send_hash_builder_init_carry_inbound(
             destination_hash,
             begin_cell()
                 .store_uint(opcodes::deploy, 32)
@@ -146,7 +148,7 @@ global cell storage::pool_creator_code_cell;
         cell state_init = gen_contract_state_init(storage::init_code_cell, init_data);
         int destination_hash = cell_hash(state_init);
 
-        send_hash_small_builder_init_carry_inbound(
+        send_hash_builder_init_carry_inbound(
             destination_hash,
             begin_cell()
                 .store_uint(opcodes::deploy, 32)
@@ -194,7 +196,8 @@ global cell storage::pool_creator_code_cell;
         cell init_data = gen_pool_init_data(my_address(), asset1, asset2, amm);
         cell state_init = gen_contract_state_init(storage::init_code_cell, init_data);
         int destination_hash = cell_hash(state_init);
-        send_hash_small_builder_init_carry_inbound(
+
+        send_hash_builder_init_carry_inbound(
             destination_hash,
             begin_cell()
                 .store_uint(opcodes::deploy, 32)
@@ -250,7 +253,7 @@ global cell storage::pool_creator_code_cell;
         } elseif (asset_type != asset::native) {
             throw(errors::invalid_asset_type);
         }
-        send_hash_small_builder_init_carry_inbound(
+        send_hash_builder_init_carry_inbound(
             destination_hash,
             begin_cell()
                 .store_uint(opcodes::deploy, 32)
@@ -270,33 +273,33 @@ global cell storage::pool_creator_code_cell;
         ;; ok
         throw_unless(errors::not_an_admin, equal_slice_bits(storage::admin_address, sender_address));
         update_addresses(in_msg_body~load_msg_addr(), storage::withdrawer_address);
-        send_small_builder_carry_inbound(
+        send_builder(
             sender_address,
-            0,
             begin_cell()
                 .store_uint(opcodes::excesses, 32)
-                .store_uint(query_id, 64)
+                .store_uint(query_id, 64),
+            SEND_MODE_CARRY_ALL_BALANCE
         );
     } elseif (opcode == opcodes::update_withdrawer) {
         ;; ok
         throw_unless(errors::not_an_admin, equal_slice_bits(storage::admin_address, sender_address));
         update_addresses(storage::admin_address, in_msg_body~load_msg_addr());
-        send_small_builder_carry_inbound(
+        send_builder(
             sender_address,
-            0,
             begin_cell()
                 .store_uint(opcodes::excesses, 32)
-                .store_uint(query_id, 64)
+                .store_uint(query_id, 64),
+            SEND_MODE_CARRY_ALL_BALANCE
         );
     } elseif (opcode == opcodes::update_code_cell) {
         throw_unless(errors::not_an_admin, equal_slice_bits(storage::admin_address, sender_address));
         update_code_cell(in_msg_body~load_ref());
-        send_small_builder_carry_inbound(
+        send_builder(
             sender_address,
-            0,
             begin_cell()
                 .store_uint(opcodes::excesses, 32)
-                .store_uint(query_id, 64)
+                .store_uint(query_id, 64),
+            SEND_MODE_CARRY_ALL_BALANCE
         );
     } elseif (opcode == opcodes::update_contract) {
         throw_unless(errors::not_an_admin, equal_slice_bits(storage::admin_address, sender_address));
@@ -306,15 +309,15 @@ global cell storage::pool_creator_code_cell;
         } else {
             cell code = in_msg_body~load_maybe_ref();
             cell data = in_msg_body~load_maybe_ref();
-            send_small_builder_carry_inbound(
+            send_builder(
                 destination,
-                0,
                 begin_cell()
                     .store_uint(opcodes::update_contract_internal, 32)
                     .store_uint(query_id, 64)
                     .store_slice(sender_address)
                     .store_maybe_ref(code)
-                    .store_maybe_ref(data)
+                    .store_maybe_ref(data),
+                SEND_MODE_CARRY_ALL_BALANCE
             );
         }
     } elseif (opcode == opcodes::update_pool) {
@@ -328,14 +331,15 @@ global cell storage::pool_creator_code_cell;
             asset2,
             amm
         );
-        send_hash_small_builder_carry_inbound(
+        send_hash_builder(
             pool_address_hash,
             0,
             begin_cell()
                 .store_uint(opcodes::update_pool_internal, 32)
                 .store_uint(query_id, 64)
                 .store_slice(sender_address)
-                .store_ref(params)
+                .store_ref(params),
+            SEND_MODE_CARRY_ALL_BALANCE
         );
     } elseif (opcode == opcodes::activate_vault) {
         ;; ok
@@ -343,8 +347,7 @@ global cell storage::pool_creator_code_cell;
         slice asset = in_msg_body~load_asset();
         slice wallet = in_msg_body~load_msg_addr();
         throw_if(errors::unexpected, (asset.preload_uint(2) != asset::jetton) | is_address_none(wallet));
-
-        send_hash_small_builder_carry_inbound(
+        send_hash_builder(
             calculate_vault_address_hash(
                 my_address(),
                 storage::init_code_cell,
@@ -354,7 +357,8 @@ global cell storage::pool_creator_code_cell;
             begin_cell()
                 .store_uint(opcodes::activate_vault_internal, 32)
                 .store_uint(query_id, 64)
-                .store_slice(wallet)
+                .store_slice(wallet),
+            SEND_MODE_CARRY_ALL_BALANCE
         );
     } elseif (opcode == opcodes::withdraw) {
         ;; ok
@@ -362,8 +366,7 @@ global cell storage::pool_creator_code_cell;
         slice asset = in_msg_body~load_asset();
         int amount = in_msg_body~load_coins();
         slice receiver = in_msg_body~load_msg_addr();
-
-        send_hash_small_builder_carry_inbound(
+        send_hash_builder(
             calculate_vault_address_hash(
                 my_address(),
                 storage::init_code_cell,
@@ -375,7 +378,8 @@ global cell storage::pool_creator_code_cell;
                 .store_uint(query_id, 64)
                 .store_slice(receiver)
                 .store_coins(amount)
-                .store_uint(0, 2)
+                .store_uint(0, 2),
+            SEND_MODE_CARRY_ALL_BALANCE
         );
     } else {
         throw(errors::unknown_opcode);

@@ -13,11 +13,12 @@ import {
     NotificationDataSingle,
     PoolParams
 } from "../wrappers/types";
-import {CodeCells, compileCodes, deployJetton} from "./utils";
+import {CodeCells, compileCodes} from "./utils";
 import {BlockchainTransaction} from "@ton/sandbox/dist/blockchain/Blockchain";
 import {VaultExtra} from "../wrappers/VaultExtra";
 import {printTransactions} from "../wrappers/utils";
 import {PoolJettonBased} from "../wrappers/PoolJettonBased";
+import { deployJettonWithVault, deployNativeVault, JettonDataWithVault } from './helpers';
 
 
 enum VaultTypes {
@@ -215,9 +216,9 @@ describe('Test', () => {
         if (type == VaultTypes.NATIVE_VAULT) {
             return nativeVault
         } else if (type == VaultTypes.JETTON_VAULT_1) {
-            return jettonVault1
+            return jetton1.vault
         } else if (type == VaultTypes.JETTON_VAULT_2) {
-            return jettonVault2
+            return jetton2.vault
         } else {
             throw Error("Unknown type")
         }
@@ -233,12 +234,9 @@ describe('Test', () => {
     let user: SandboxContract<TreasuryContract>;
     let factory: SandboxContract<Factory>;
 
-    let jettonMaster1: SandboxContract<JettonMaster>;
-    let jettonMaster2: SandboxContract<JettonMaster>;
-
-    let nativeVault: SandboxContract<VaultNative>;
-    let jettonVault1: SandboxContract<VaultJetton>;
-    let jettonVault2: SandboxContract<VaultJetton>;
+    let jetton1: JettonDataWithVault
+    let jetton2: JettonDataWithVault
+    let nativeVault: SandboxContract<VaultNative>
 
     let testArguments = [
         [VaultTypes.NATIVE_VAULT, VaultTypes.JETTON_VAULT_1, 0],
@@ -274,52 +272,32 @@ describe('Test', () => {
         console.log('factory address =', factory.address.toRawString());
         await factory.sendDeploy(admin.getSender(), toNano(1.0));
 
-        let deploy = await deployJetton(blockchain, admin, "TST");
-        jettonMaster1 = deploy.master;
+        jetton1 = await deployJettonWithVault(
+            blockchain,
+            factory,
+            admin,
+            'TST1'
+        )
+        jetton2 = await deployJettonWithVault(
+            blockchain,
+            factory,
+            admin,
+            'TST2'
+        )
+        nativeVault = await deployNativeVault(blockchain, factory, admin)
 
-        deploy = await deployJetton(blockchain, admin, "TST2");
-        jettonMaster2 = deploy.master;
-
-        await factory.sendCreateVault(admin.getSender(), toNano(.04), null);
-        nativeVault = blockchain.openContract(
-            VaultNative.createFromAddress(await factory.getVaultAddress(null))
-        );
-
-        await factory.sendCreateVault(admin.getSender(), toNano(.04), jettonMaster1.address);
-        jettonVault1 = blockchain.openContract(
-            VaultJetton.createFromAddress(await factory.getVaultAddress(jettonMaster1.address))
-        );
-
-        await factory.sendCreateVault(admin.getSender(), toNano(.04), jettonMaster2.address);
-        jettonVault2 = blockchain.openContract(
-            VaultJetton.createFromAddress(await factory.getVaultAddress(jettonMaster2.address))
-        );
-
-        await factory.sendCreateVault(admin.getSender(), toNano(.04), jettonMaster2.address);
-        jettonVault2 = blockchain.openContract(
-            VaultJetton.createFromAddress(await factory.getVaultAddress(jettonMaster2.address))
-        );
-
-        // fill with balance
-        let jettonWalletAdmin = blockchain.openContract(
-            JettonWallet.createFromAddress(await jettonMaster1.getWalletAddress(admin.address))
-        );
-        await jettonWalletAdmin.sendTransfer(
+        await jetton1.wallet.sendTransfer(
             admin.getSender(),
             toNano(1.0),
             user.address,
             toNano(50.0)
-        );
-
-        jettonWalletAdmin = blockchain.openContract(
-            JettonWallet.createFromAddress(await jettonMaster2.getWalletAddress(admin.address))
-        );
-        await jettonWalletAdmin.sendTransfer(
+        )
+        await jetton2.wallet.sendTransfer(
             admin.getSender(),
             toNano(1.0),
             user.address,
             toNano(50.0)
-        );
+        )
     });
 
     test.each(testArguments)
@@ -812,32 +790,29 @@ describe('Test', () => {
             notificationAddress = admin.address;
             resolvedNotificationAddress = admin.address;
         }
+        const poolParams = new PoolParams(
+            await resolveVault(t1).getAssetParsed(),
+            await resolveVault(t2).getAssetParsed(),
+            AMM.ConstantProduct
+        )
 
         await createPool(user,
             resolveVault(t1),
             toNano(1),
-            new PoolParams(
-                await resolveVault(t1).getAssetParsed(),
-                await resolveVault(t2).getAssetParsed(),
-                AMM.ConstantProduct
-            ),
+            poolParams,
             null
         );
 
         await createPool(user,
             resolveVault(t2),
             toNano(1),
-            new PoolParams(
-                await resolveVault(t1).getAssetParsed(),
-                await resolveVault(t2).getAssetParsed(),
-                AMM.ConstantProduct
-            ),
+            poolParams,
             null
         )
         let pool = blockchain.openContract(
             await factory.getPoolJettonBased(
-                await resolveVault(t1).getAssetParsed(),
-                await resolveVault(t2).getAssetParsed(),
+                poolParams.first_asset,
+                poolParams.second_asset,
                 AMM.ConstantProduct
             )
         );
@@ -847,21 +822,13 @@ describe('Test', () => {
         await createPool(user,
             resolveVault(t1),
             toNano(1),
-            new PoolParams(
-                await resolveVault(t1).getAssetParsed(),
-                await resolveVault(t2).getAssetParsed(),
-                AMM.ConstantProduct
-            ),
+            poolParams,
             null
         );
         let txs = await createPool(user,
             resolveVault(t2),
             toNano(1),
-            new PoolParams(
-                await resolveVault(t1).getAssetParsed(),
-                await resolveVault(t2).getAssetParsed(),
-                AMM.ConstantProduct
-            ),
+            poolParams,
             new NotificationData(
                 null,
                 new NotificationDataSingle(

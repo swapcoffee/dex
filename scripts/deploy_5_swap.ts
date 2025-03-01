@@ -59,7 +59,7 @@ async function sendMessage(provider: NetworkProvider,
 
         await vault.sendSwapNative(
             provider.sender(),
-            toNano('0.1') + inputAmount,
+            toNano(0.1) + inputAmount,
             inputAmount,
             ssp,
             new SwapParams(
@@ -81,7 +81,7 @@ async function sendMessage(provider: NetworkProvider,
             )
         let vault = await factory.getVaultAddress(input)
 
-        await wallet.sendSwapJetton(provider.sender(), toNano('0.1'), vault, inputAmount,
+        await wallet.sendSwapJetton(provider.sender(), toNano(0.1), vault, inputAmount,
             ssp,
             new SwapParams(
                 BigInt((1 << 30) * 2),

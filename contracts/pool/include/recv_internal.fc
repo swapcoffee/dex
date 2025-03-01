@@ -11,12 +11,15 @@
     slice sender_address = cs~load_msg_addr();
     (int opcode, int query_id) = (in_msg_body~load_uint(32), in_msg_body~load_uint(64));
     if (opcode == opcodes::swap_internal) {
+        reserve_for_carry_inbound_without_value();
         swap_internal(sender_address, query_id, in_msg_body, true);
     } elseif (opcode == opcodes::deposit_liquidity_internal) {
+        ;; reserves handled inside
         deposit_liquidity(sender_address, query_id, in_msg_body, false);
     } elseif (opcode == opcodes::burn_notification) {
         ;; allow even if not active
         force_chain(sender_address);
+        ;; reserves handled inside
         withdraw_liquidity(sender_address, query_id, in_msg_body);
     } elseif (opcode == opcodes::update_pool_internal) {
         update_pool(sender_address, query_id, in_msg_body);
@@ -41,9 +44,9 @@
         int include_address? = in_msg_body~load_uint(1);
         int expected_hash = gen_lp_wallet_state_init_hash(owner_address, my_address(), storage::lp_wallet_code);
         slice wallet_address = construct_address(BASECHAIN, expected_hash);
-        send_small_builder_carry_inbound(
+        reserve_for_carry_inbound_without_value();
+        send_builder(
             sender_address,
-            0,
             begin_cell()
                 .store_uint(opcodes::take_wallet_address, 32)
                 .store_uint(query_id, 64)
@@ -52,7 +55,8 @@
                     include_address?
                     ? begin_cell().store_slice(owner_address).end_cell()
                     : null()
-                )
+                ),
+            SEND_MODE_CARRY_ALL_BALANCE
         );
     } else {
         throw(errors::unknown_opcode);

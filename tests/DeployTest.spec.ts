@@ -2,11 +2,10 @@ import {Blockchain, SandboxContract, TreasuryContract} from '@ton/sandbox';
 import {beginCell, toNano} from '@ton/core';
 import '@ton/test-utils';
 import {Factory} from "../wrappers/Factory";
-import {VaultNative} from "../wrappers/VaultNative";
-import {getTransactionAccount, printTransactions} from "../wrappers/utils";
-import {VaultJetton} from "../wrappers/VaultJetton";
+import {printTransactions} from "../wrappers/utils";
 import {AMM, PoolParams} from "../wrappers/types";
-import {CodeCells, compileCodes, deployJetton} from "./utils";
+import {CodeCells, compileCodes} from "./utils";
+import { deployJettonWithoutVault, deployJettonWithVault, deployNativeVault } from './helpers';
 
 describe('Test', () => {
     let codeCells: CodeCells;
@@ -30,97 +29,29 @@ describe('Test', () => {
     });
 
     it('deploy vault jetton', async () => {
-        let deploy = await deployJetton(blockchain, admin, "TST");
-        const jettonMaster = deploy.master;
-
-        console.log('---- factory.sendCreateVaultJetton ----');
-        // blockchain.verbosity = {
-        //     print: true,
-        //     blockchainLogs: true,
-        //     vmLogs: 'vm_logs_gas',
-        //     debugLogs: true
-        // };
-        let res = await factory.sendCreateVault(admin.getSender(), toNano(.04), jettonMaster.address);
-        printTransactions(res.transactions)
-        const vaultJetton = blockchain.openContract(
-            VaultJetton.createFromAddress(getTransactionAccount(res.transactions[2])!)
-        );
-        console.log('vault_jetton address =', vaultJetton.address.toRawString());
-
-        expect((await factory.getVaultAddress(jettonMaster.address)).toRawString())
-            .toBe(vaultJetton.address.toRawString());
-
-        expect(res.transactions).toHaveTransaction({
-            from: admin.address,
-            to: factory.address,
-            success: true,
-            exitCode: 0
-        });
-        expect(res.transactions).toHaveTransaction({
-            from: factory.address,
-            to: vaultJetton.address,
-            success: true,
-            exitCode: 0
-        });
-        expect(res.transactions).toHaveTransaction({
-            from: vaultJetton.address,
-            to: jettonMaster.address,
-            success: true,
-            exitCode: 0,
-            op: 0x2c76b973
-        });
-        expect(res.transactions).toHaveTransaction({
-            from: jettonMaster.address,
-            to: vaultJetton.address,
-            success: true,
-            exitCode: 0,
-            op: 0xd1735400
-        });
-        // 4 + 1
-        expect(res.transactions.length).toBe(5);
+        const jetton = await deployJettonWithVault(
+            blockchain,
+            factory,
+            admin,
+            'TST'
+        )
+        expect((await factory.getVaultAddress(jetton.master.address)).toRawString())
+            .toBe(jetton.vault.address.toRawString())
     });
 
     it('deploy vault native', async () => {
-        console.log('---- factory.sendCreateVaultJetton ----');
-        let res = await factory.sendCreateVault(admin.getSender(), toNano(.04), null);
-        printTransactions(res.transactions)
-        const vaultJetton = blockchain.openContract(
-            VaultJetton.createFromAddress(getTransactionAccount(res.transactions[2])!)
-        );
-        console.log('native_vault_jetton address =', vaultJetton.address.toRawString());
-        expect((await factory.getVaultAddress(null)).toRawString())
-            .toBe(vaultJetton.address.toRawString());
-
-        expect(res.transactions).toHaveTransaction({
-            from: admin.address,
-            to: factory.address,
-            success: true,
-            exitCode: 0
-        });
-        expect(res.transactions).toHaveTransaction({
-            from: factory.address,
-            to: vaultJetton.address,
-            success: true,
-            exitCode: 0
-        });
-        // 2 + 1
-        expect(res.transactions.length).toBe(3);
+        const nativeVault = await deployNativeVault(blockchain, factory, admin)
+        expect((await factory.getVaultAddress(null)).toRawString()).toBe(nativeVault.address.toRawString())
     });
 
     it('deploy pool jetton+native stable', async () => {
-        let deploy = await deployJetton(blockchain, admin, "TST");
-        const jettonMaster = deploy.master;
-        const jettonWallet = deploy.jettonWallet;
-        (await factory.sendCreateVault(admin.getSender(), toNano(.04), null)).transactions;
-        await factory.sendCreateVault(admin.getSender(), toNano(.04), jettonMaster.address);
-
-        const vaultJetton = blockchain.openContract(
-            VaultJetton.createFromAddress(await factory.getVaultAddress(jettonMaster.address))
-        );
-
-        const vaultNative = blockchain.openContract(
-            VaultNative.createFromAddress(await factory.getVaultAddress(null))
-        );
+        const jetton = await deployJettonWithVault(
+            blockchain,
+            factory,
+            admin,
+            'TST'
+        )
+        const nativeVault = await deployNativeVault(blockchain, factory, admin)
 
         const ammSettings = beginCell()
             .storeUint(2_000, 16)
@@ -128,50 +59,50 @@ describe('Test', () => {
             .storeCoins(1)
             .endCell()
 
-        let txs = await jettonWallet.sendCreatePoolJetton(
+        let txs = await jetton.wallet.sendCreatePoolJetton(
             admin.getSender(),
             toNano(1.0),
-            vaultJetton.address,
+            jetton.vault.address,
             toNano(10.0),
             admin.address,
-            PoolParams.fromAddress(jettonMaster.address, null, AMM.CurveFiStable),
+            PoolParams.fromAddress(jetton.master.address, null, AMM.CurveFiStable),
             ammSettings,
             null
         );
 
-        let address1 = await factory.getPoolAddress(jettonMaster.address, null, AMM.CurveFiStable);
-        let address2 = await factory.getPoolAddress(null, jettonMaster.address, AMM.CurveFiStable);
+        let address1 = await factory.getPoolAddress(jetton.master.address, null, AMM.CurveFiStable);
+        let address2 = await factory.getPoolAddress(null, jetton.master.address, AMM.CurveFiStable);
 
         expect(address1.toRawString()).toBe(address2.toRawString());
         expect(txs.transactions).toHaveTransaction({
-            to: vaultJetton.address,
+            to: jetton.vault.address,
             exitCode: 0,
             success: true
         });
         expect(txs.transactions).toHaveTransaction({
-            from: vaultJetton.address,
+            from: jetton.vault.address,
             to: factory.address,
             exitCode: 0,
             success: true
         });
 
-        txs = await vaultNative.sendCreatePoolNative(
+        txs = await nativeVault.sendCreatePoolNative(
             admin.getSender(),
             toNano(5.0),
             toNano(4.0),
             admin.address,
-            PoolParams.fromAddress(null, jettonMaster.address, AMM.CurveFiStable),
+            PoolParams.fromAddress(null, jetton.master.address, AMM.CurveFiStable),
             ammSettings,
             null
         );
 
         expect(txs.transactions).toHaveTransaction({
-            to: vaultNative.address,
+            to: nativeVault.address,
             exitCode: 0,
             success: true
         });
         expect(txs.transactions).toHaveTransaction({
-            from: vaultNative.address,
+            from: nativeVault.address,
             to: factory.address,
             exitCode: 0,
             success: true
@@ -185,70 +116,65 @@ describe('Test', () => {
     });
 
     it('deploy pool jetton+jetton', async () => {
-        let deploy = await deployJetton(blockchain, admin, "TST");
-        const jettonMaster = deploy.master;
-        const jettonWallet = deploy.jettonWallet;
-        await factory.sendCreateVault(admin.getSender(), toNano(.04), jettonMaster.address);
+        const jetton1 = await deployJettonWithVault(
+            blockchain,
+            factory,
+            admin,
+            'TST1'
+        )
+        const jetton2 = await deployJettonWithVault(
+            blockchain,
+            factory,
+            admin,
+            'TST2'
+        )
 
-        deploy = await deployJetton(blockchain, admin, "TST2");
-        const jettonMaster2 = deploy.master;
-        const jettonWallet2 = deploy.jettonWallet;
-        await factory.sendCreateVault(admin.getSender(), toNano(.04), jettonMaster2.address);
-
-        const vaultJetton1 = blockchain.openContract(
-            VaultJetton.createFromAddress(await factory.getVaultAddress(jettonMaster.address))
-        );
-
-        const vaultJetton2 = blockchain.openContract(
-            VaultNative.createFromAddress(await factory.getVaultAddress(jettonMaster2.address))
-        );
-
-        let txs = await jettonWallet.sendCreatePoolJetton(
+        let txs = await jetton1.wallet.sendCreatePoolJetton(
             admin.getSender(),
             toNano(1.0),
-            vaultJetton1.address,
+            jetton1.vault.address,
             toNano(10.0),
             admin.address,
-            PoolParams.fromAddress(jettonMaster.address, jettonMaster2.address, AMM.ConstantProduct),
+            PoolParams.fromAddress(jetton1.master.address, jetton2.master.address, AMM.ConstantProduct),
             null,
             null
         );
 
-        let address1 = await factory.getPoolAddress(jettonMaster.address, jettonMaster2.address, AMM.ConstantProduct);
-        let address2 = await factory.getPoolAddress(jettonMaster2.address, jettonMaster.address, AMM.ConstantProduct);
+        let address1 = await factory.getPoolAddress(jetton1.master.address, jetton2.master.address, AMM.ConstantProduct);
+        let address2 = await factory.getPoolAddress(jetton2.master.address, jetton1.master.address, AMM.ConstantProduct);
 
         expect(address1.toRawString()).toBe(address2.toRawString());
         expect(txs.transactions).toHaveTransaction({
-            to: vaultJetton1.address,
+            to: jetton1.vault.address,
             exitCode: 0,
             success: true
         });
         expect(txs.transactions).toHaveTransaction({
-            from: vaultJetton1.address,
+            from: jetton1.vault.address,
             to: factory.address,
             exitCode: 0,
             success: true
         });
 
-        txs = await jettonWallet2.sendCreatePoolJetton(
+        txs = await jetton2.wallet.sendCreatePoolJetton(
             admin.getSender(),
             toNano(1.0),
-            vaultJetton2.address,
+            jetton2.vault.address,
             toNano(10.0),
             admin.address,
-            PoolParams.fromAddress(jettonMaster.address, jettonMaster2.address, AMM.ConstantProduct),
+            PoolParams.fromAddress(jetton1.master.address, jetton2.master.address, AMM.ConstantProduct),
             null,
             null
         );
         printTransactions(txs.transactions);
 
         expect(txs.transactions).toHaveTransaction({
-            to: vaultJetton2.address,
+            to: jetton2.vault.address,
             exitCode: 0,
             success: true
         });
         expect(txs.transactions).toHaveTransaction({
-            from: vaultJetton2.address,
+            from: jetton2.vault.address,
             to: factory.address,
             exitCode: 0,
             success: true
@@ -261,11 +187,14 @@ describe('Test', () => {
     });
 
     it('failed to resolve pool for the same jetton masters', async () => {
-        let deploy = await deployJetton(blockchain, admin, "TST");
-        const jettonMaster = deploy.master;
+        const jetton = await deployJettonWithoutVault(
+            blockchain,
+            admin,
+            'TST1'
+        )
         let func = async () => factory.getPoolAddress(
-            jettonMaster.address,
-            jettonMaster.address,
+            jetton.master.address,
+            jetton.master.address,
             AMM.ConstantProduct
         );
         await expect(func()).rejects.toThrow("Unable to execute get method. Got exit_code: 257");

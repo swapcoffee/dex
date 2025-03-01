@@ -3,7 +3,7 @@ import {Address, beginCell, toNano} from '@ton/core';
 import '@ton/test-utils';
 import {Factory} from "../wrappers/Factory";
 import {VaultJetton} from "../wrappers/VaultJetton";
-import {CodeCells, compileCodes, deployJetton} from "./utils";
+import {CodeCells, compileCodes} from "./utils";
 import {JettonMaster, JettonWallet} from "../wrappers/Jetton";
 import {VaultNative} from "../wrappers/VaultNative";
 import {
@@ -15,6 +15,7 @@ import {
 } from "../wrappers/types";
 import {VaultExtra} from "../wrappers/VaultExtra";
 import {printTransactions} from "../wrappers/utils";
+import { deployJettonWithVault, deployNativeVault, JettonDataWithVault } from './helpers';
 
 describe('Test', () => {
     let codeCells: CodeCells;
@@ -26,9 +27,8 @@ describe('Test', () => {
     let admin: SandboxContract<TreasuryContract>;
     let factory: SandboxContract<Factory>;
 
-    let jettonMaster1: SandboxContract<JettonMaster>;
-    let vaultNative: SandboxContract<VaultNative>;
-    let vaultJetton1: SandboxContract<VaultJetton>;
+    let jetton1: JettonDataWithVault
+    let nativeVault: SandboxContract<VaultNative>
 
     async function doSwap(
         sender: SandboxContract<TreasuryContract>,
@@ -90,46 +90,38 @@ describe('Test', () => {
         );
         await factory.sendDeploy(admin.getSender(), toNano(1.0));
 
-        let deploy = await deployJetton(blockchain, admin, "TST1");
-        jettonMaster1 = deploy.master;
+        jetton1 = await deployJettonWithVault(
+            blockchain,
+            factory,
+            admin,
+            'TST1'
+        )
+        nativeVault = await deployNativeVault(blockchain, factory, admin)
 
-        await factory.sendCreateVault(admin.getSender(), toNano(.04), null);
-        await factory.sendCreateVault(admin.getSender(), toNano(.04), jettonMaster1.address);
-
-        vaultNative = blockchain.openContract(VaultNative.createFromAddress(await factory.getVaultAddress(null)));
-        vaultJetton1 = blockchain.openContract(VaultJetton.createFromAddress(await factory.getVaultAddress(jettonMaster1.address)));
-
-        await vaultNative.sendCreatePoolNative(
+        await nativeVault.sendCreatePoolNative(
             admin.getSender(),
             toNano(5),
             toNano(5),
             admin.address,
             new PoolParams(
                 AssetNative.INSTANCE,
-                AssetJetton.fromAddress(jettonMaster1.address),
+                AssetJetton.fromAddress(jetton1.master.address),
                 AMM.ConstantProduct
             ),
             null,
             null
         );
 
-        let adminJettonWallet1 = blockchain.openContract(
-            JettonWallet.createFromAddress(
-                await blockchain.openContract(
-                    JettonMaster.createFromAddress(jettonMaster1.address)).getWalletAddress(admin.address)
-            )
-        )
-
         // native -> jetton1 stable
         {
-            await adminJettonWallet1.sendCreatePoolJetton(admin.getSender(),
+            await jetton1.wallet.sendCreatePoolJetton(admin.getSender(),
                 toNano(1),
-                vaultJetton1.address,
+                jetton1.vault.address,
                 17n,
                 admin.address,
                 new PoolParams(
                     AssetNative.INSTANCE,
-                    AssetJetton.fromAddress(jettonMaster1.address),
+                    AssetJetton.fromAddress(jetton1.master.address),
                     AMM.CurveFiStable
                 ),
                 beginCell()
@@ -139,14 +131,14 @@ describe('Test', () => {
                     .endCell(),
                 null
             )
-            await vaultNative.sendCreatePoolNative(
+            await nativeVault.sendCreatePoolNative(
                 admin.getSender(),
                 toNano(6),
                 1999n,
                 admin.address,
                 new PoolParams(
                     AssetNative.INSTANCE,
-                    AssetJetton.fromAddress(jettonMaster1.address),
+                    AssetJetton.fromAddress(jetton1.master.address),
                     AMM.CurveFiStable
                 ),
                 beginCell()
@@ -161,8 +153,8 @@ describe('Test', () => {
     });
 
     test('test do stable swap forward', async () => {
-        let vaultA = vaultJetton1;
-        let vaultB = vaultNative;
+        let vaultA = jetton1.vault;
+        let vaultB = nativeVault;
         let amm = AMM.CurveFiStable;
 
         let pool = blockchain.openContract(
@@ -200,8 +192,8 @@ describe('Test', () => {
     });
 
     test('test do stable swap backward', async () => {
-        let vaultA = vaultNative;
-        let vaultB = vaultJetton1;
+        let vaultA = nativeVault;
+        let vaultB = jetton1.vault;
         let amm = AMM.CurveFiStable;
 
         let pool = blockchain.openContract(

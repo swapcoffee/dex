@@ -1,14 +1,14 @@
 import {Blockchain, SandboxContract, TreasuryContract} from '@ton/sandbox';
-import {Cell, toNano} from '@ton/core';
+import {toNano} from '@ton/core';
 import '@ton/test-utils';
 import {Factory} from "../wrappers/Factory";
 import {VaultNative} from "../wrappers/VaultNative";
-import {JettonMaster, JettonWallet} from "../wrappers/Jetton";
-import {VaultJetton} from "../wrappers/VaultJetton";
+import {JettonWallet} from "../wrappers/Jetton";
 import {AMM, DepositLiquidityParams, DepositLiquidityParamsTrimmed, PoolParams} from "../wrappers/types";
-import {CodeCells, compileCodes, deployJetton, lpWalletCode} from "./utils";
+import {CodeCells, compileCodes} from "./utils";
 import {LiquidityDepository} from "../wrappers/LiquidityDepository";
 import {printTransactions} from "../wrappers/utils";
+import { deployJettonWithVault, deployNativeVault, JettonDataWithVault } from './helpers';
 
 describe('Test', () => {
     let codeCells: CodeCells;
@@ -21,12 +21,9 @@ describe('Test', () => {
     let user: SandboxContract<TreasuryContract>;
     let factory: SandboxContract<Factory>;
 
-    let jettonMaster1: SandboxContract<JettonMaster>;
-    let jettonMaster2: SandboxContract<JettonMaster>;
-
+    let jetton1: JettonDataWithVault
+    let jetton2: JettonDataWithVault
     let nativeVault: SandboxContract<VaultNative>;
-    let jettonVault1: SandboxContract<VaultJetton>;
-    let jettonVault2: SandboxContract<VaultJetton>;
 
     beforeEach(async () => {
         blockchain = await Blockchain.create();
@@ -39,36 +36,32 @@ describe('Test', () => {
         console.log('factory address =', factory.address.toRawString());
         await factory.sendDeploy(admin.getSender(), toNano(1.0));
 
-        let deploy = await deployJetton(blockchain, admin, "TST");
-        jettonMaster1 = deploy.master;
+        jetton1 = await deployJettonWithVault(
+            blockchain,
+            factory,
+            admin,
+            'TST1'
+        )
+        jetton2 = await deployJettonWithVault(
+            blockchain,
+            factory,
+            admin,
+            'TST2'
+        )
+        nativeVault = await deployNativeVault(blockchain, factory, admin)
 
-        deploy = await deployJetton(blockchain, admin, "TST2");
-        jettonMaster2 = deploy.master;
-
-        await factory.sendCreateVault(admin.getSender(), toNano(.04), null);
-        nativeVault = blockchain.openContract(
-            VaultNative.createFromAddress(await factory.getVaultAddress(null))
-        );
-
-        await factory.sendCreateVault(admin.getSender(), toNano(.04), jettonMaster1.address);
-        jettonVault1 = blockchain.openContract(
-            VaultJetton.createFromAddress(await factory.getVaultAddress(jettonMaster1.address))
-        );
-
-        await factory.sendCreateVault(admin.getSender(), toNano(.04), jettonMaster2.address);
-        jettonVault2 = blockchain.openContract(
-            VaultJetton.createFromAddress(await factory.getVaultAddress(jettonMaster2.address))
-        );
-
-        let jettonWallet1Admin = blockchain.openContract(
-            JettonWallet.createFromAddress(await jettonMaster1.getWalletAddress(admin.address))
-        );
-        let jettonWallet2Admin = blockchain.openContract(
-            JettonWallet.createFromAddress(await jettonMaster2.getWalletAddress(admin.address))
-        );
-
-        await jettonWallet1Admin.sendTransfer(admin.getSender(), toNano('0.5'), user.address, toNano('50'));
-        await jettonWallet2Admin.sendTransfer(admin.getSender(), toNano('0.5'), user.address, toNano('50'));
+        await jetton1.wallet.sendTransfer(
+            admin.getSender(),
+            toNano(.5),
+            user.address,
+            toNano(50)
+        )
+        await jetton2.wallet.sendTransfer(
+            admin.getSender(),
+            toNano(.5),
+            user.address,
+            toNano(50)
+        )
     });
 
     test.each([['admin'], ['user']])('deposit liquidity jetton+jetton, %s', async (by) => {
@@ -80,10 +73,10 @@ describe('Test', () => {
         }
 
         let senderAddressJettonWallet1 = blockchain.openContract(
-            JettonWallet.createFromAddress(await jettonMaster1.getWalletAddress(sender.address))
+            JettonWallet.createFromAddress(await jetton1.master.getWalletAddress(sender.address))
         );
         let senderAddressJettonWallet2 = blockchain.openContract(
-            JettonWallet.createFromAddress(await jettonMaster2.getWalletAddress(sender.address))
+            JettonWallet.createFromAddress(await jetton2.master.getWalletAddress(sender.address))
         );
         let param = new DepositLiquidityParams(
             new DepositLiquidityParamsTrimmed(
@@ -93,29 +86,29 @@ describe('Test', () => {
                 null,
                 null
             ),
-            PoolParams.fromAddress(jettonMaster1.address, jettonMaster2.address, AMM.ConstantProduct)
+            PoolParams.fromAddress(jetton1.master.address, jetton2.master.address, AMM.ConstantProduct)
         )
 
         let txs = await senderAddressJettonWallet1.sendDepositLiquidityJetton(sender.getSender(),
             toNano(1),
-            jettonVault1.address,
+            jetton1.vault.address,
             toNano(10),
             param
         );
         printTransactions(txs.transactions);
         expect(txs.transactions).toHaveTransaction({
-            from: await jettonMaster1.getWalletAddress(jettonVault1.address),
-            to: jettonVault1.address,
+            from: await jetton1.master.getWalletAddress(jetton1.vault.address),
+            to: jetton1.vault.address,
             exitCode: 0,
             success: true
         });
         expect(txs.transactions).toHaveTransaction({
-            from: jettonVault1.address,
+            from: jetton1.vault.address,
             to: factory.address,
             exitCode: 0,
             success: true
         });
-        let depositoryAddress = await factory.getLiquidityDepositoryAddress(sender.address, jettonMaster2.address, jettonMaster1.address, AMM.ConstantProduct);
+        let depositoryAddress = await factory.getLiquidityDepositoryAddress(sender.address, jetton2.master.address, jetton1.master.address, AMM.ConstantProduct);
         console.log(depositoryAddress.toRawString());
         expect(txs.transactions).toHaveTransaction({
             from: factory.address,
@@ -126,32 +119,32 @@ describe('Test', () => {
 
         txs = await senderAddressJettonWallet2.sendDepositLiquidityJetton(sender.getSender(),
             toNano(1),
-            jettonVault2.address,
+            jetton2.vault.address,
             toNano(11),
             param
         );
         printTransactions(txs.transactions);
         expect(txs.transactions).toHaveTransaction({
-            from: await jettonMaster2.getWalletAddress(jettonVault2.address),
-            to: jettonVault2.address,
+            from: await jetton2.master.getWalletAddress(jetton2.vault.address),
+            to: jetton2.vault.address,
             exitCode: 0,
             success: true
         });
         expect(txs.transactions).toHaveTransaction({
-            from: jettonVault2.address,
+            from: jetton2.vault.address,
             to: factory.address,
             exitCode: 0,
             success: true
         });
         expect(txs.transactions).toHaveTransaction({
             from: factory.address,
-            to: await factory.getLiquidityDepositoryAddress(sender.address, jettonMaster2.address, jettonMaster1.address, AMM.ConstantProduct),
+            to: await factory.getLiquidityDepositoryAddress(sender.address, jetton2.master.address, jetton1.master.address, AMM.ConstantProduct),
             exitCode: 0,
             success: true
         });
         expect(txs.transactions).toHaveTransaction({
-            from: await factory.getLiquidityDepositoryAddress(sender.address, jettonMaster2.address, jettonMaster1.address, AMM.ConstantProduct),
-            to: await factory.getPoolAddress(jettonMaster2.address, jettonMaster1.address, AMM.ConstantProduct),
+            from: await factory.getLiquidityDepositoryAddress(sender.address, jetton2.master.address, jetton1.master.address, AMM.ConstantProduct),
+            to: await factory.getPoolAddress(jetton2.master.address, jetton1.master.address, AMM.ConstantProduct),
             success: false // because un-init
         });
     });
@@ -165,7 +158,7 @@ describe('Test', () => {
         }
 
         let senderAddressJettonWallet1 = blockchain.openContract(
-            JettonWallet.createFromAddress(await jettonMaster1.getWalletAddress(sender.address))
+            JettonWallet.createFromAddress(await jetton1.master.getWalletAddress(sender.address))
         );
         let param = new DepositLiquidityParams(
             new DepositLiquidityParamsTrimmed(
@@ -175,30 +168,30 @@ describe('Test', () => {
                 null,
                 null
             ),
-            PoolParams.fromAddress(jettonMaster1.address, null, AMM.ConstantProduct)
+            PoolParams.fromAddress(jetton1.master.address, null, AMM.ConstantProduct)
         )
 
         let txs = await senderAddressJettonWallet1.sendDepositLiquidityJetton(sender.getSender(),
             toNano('1'),
-            jettonVault1.address,
+            jetton1.vault.address,
             toNano('10'),
             param
         );
         expect(txs.transactions).toHaveTransaction({
-            from: await jettonMaster1.getWalletAddress(jettonVault1.address),
-            to: jettonVault1.address,
+            from: await jetton1.master.getWalletAddress(jetton1.vault.address),
+            to: jetton1.vault.address,
             exitCode: 0,
             success: true
         });
         expect(txs.transactions).toHaveTransaction({
-            from: jettonVault1.address,
+            from: jetton1.vault.address,
             to: factory.address,
             exitCode: 0,
             success: true
         });
         expect(txs.transactions).toHaveTransaction({
             from: factory.address,
-            to: await factory.getLiquidityDepositoryAddress(sender.address, null, jettonMaster1.address, AMM.ConstantProduct),
+            to: await factory.getLiquidityDepositoryAddress(sender.address, null, jetton1.master.address, AMM.ConstantProduct),
             exitCode: 0,
             success: true
         });
@@ -222,13 +215,13 @@ describe('Test', () => {
         });
         expect(txs.transactions).toHaveTransaction({
             from: factory.address,
-            to: await factory.getLiquidityDepositoryAddress(sender.address, null, jettonMaster1.address, AMM.ConstantProduct),
+            to: await factory.getLiquidityDepositoryAddress(sender.address, null, jetton1.master.address, AMM.ConstantProduct),
             exitCode: 0,
             success: true
         });
         expect(txs.transactions).toHaveTransaction({
-            from: await factory.getLiquidityDepositoryAddress(sender.address, null, jettonMaster1.address, AMM.ConstantProduct),
-            to: await factory.getPoolAddress(null, jettonMaster1.address, AMM.ConstantProduct),
+            from: await factory.getLiquidityDepositoryAddress(sender.address, null, jetton1.master.address, AMM.ConstantProduct),
+            to: await factory.getPoolAddress(null, jetton1.master.address, AMM.ConstantProduct),
             success: false // because un-init
         });
     });
@@ -242,7 +235,7 @@ describe('Test', () => {
         }
 
         let senderAddressJettonWallet1 = blockchain.openContract(
-            JettonWallet.createFromAddress(await jettonMaster1.getWalletAddress(sender.address))
+            JettonWallet.createFromAddress(await jetton1.master.getWalletAddress(sender.address))
         );
         let param = new DepositLiquidityParams(
             new DepositLiquidityParamsTrimmed(
@@ -252,18 +245,18 @@ describe('Test', () => {
                 null,
                 null
             ),
-            PoolParams.fromAddress(jettonMaster1.address, null, AMM.ConstantProduct)
+            PoolParams.fromAddress(jetton1.master.address, null, AMM.ConstantProduct)
         )
 
         await senderAddressJettonWallet1.sendDepositLiquidityJetton(sender.getSender(),
             toNano('1'),
-            jettonVault1.address,
+            jetton1.vault.address,
             toNano('10'),
             param
         );
         let depository = blockchain.openContract(
             LiquidityDepository.createFromAddress(
-                await factory.getLiquidityDepositoryAddress(sender.address, null, jettonMaster1.address, AMM.ConstantProduct))
+                await factory.getLiquidityDepositoryAddress(sender.address, null, jetton1.master.address, AMM.ConstantProduct))
         );
 
         let txs = await depository.sendWithdrawFunds(sender.getSender(), toNano('1.0'));
@@ -278,23 +271,23 @@ describe('Test', () => {
         expect(txs.transactions).toHaveTransaction(
             {
                 from: depository.address,
-                to: jettonVault1.address,
+                to: jetton1.vault.address,
                 success: true,
                 exitCode: 0
             }
         );
         expect(txs.transactions).toHaveTransaction(
             {
-                from: jettonVault1.address,
-                to: await jettonMaster1.getWalletAddress(jettonVault1.address),
+                from: jetton1.vault.address,
+                to: await jetton1.master.getWalletAddress(jetton1.vault.address),
                 success: true,
                 exitCode: 0
             }
         );
         expect(txs.transactions).toHaveTransaction(
             {
-                from: await jettonMaster1.getWalletAddress(jettonVault1.address),
-                to: await jettonMaster1.getWalletAddress(sender.address),
+                from: await jetton1.master.getWalletAddress(jetton1.vault.address),
+                to: await jetton1.master.getWalletAddress(sender.address),
                 success: true,
                 exitCode: 0
             }
@@ -317,7 +310,7 @@ describe('Test', () => {
                 null,
                 null
             ),
-            PoolParams.fromAddress(jettonMaster1.address, null, AMM.ConstantProduct)
+            PoolParams.fromAddress(jetton1.master.address, null, AMM.ConstantProduct)
         )
 
         await nativeVault.sendDepositLiquidityNative(sender.getSender(),
@@ -327,7 +320,7 @@ describe('Test', () => {
         );
         let depository = blockchain.openContract(
             LiquidityDepository.createFromAddress(
-                await factory.getLiquidityDepositoryAddress(sender.address, null, jettonMaster1.address, AMM.ConstantProduct))
+                await factory.getLiquidityDepositoryAddress(sender.address, null, jetton1.master.address, AMM.ConstantProduct))
         );
 
         let txs = await depository.sendWithdrawFunds(sender.getSender(), toNano('1.0'));
@@ -380,7 +373,7 @@ describe('Test', () => {
                 null,
                 null
             ),
-            PoolParams.fromAddress(jettonMaster1.address, null, AMM.ConstantProduct)
+            PoolParams.fromAddress(jetton1.master.address, null, AMM.ConstantProduct)
         )
 
         await nativeVault.sendDepositLiquidityNative(sender.getSender(),
@@ -390,7 +383,7 @@ describe('Test', () => {
         );
         let depository = blockchain.openContract(
             LiquidityDepository.createFromAddress(
-                await factory.getLiquidityDepositoryAddress(sender.address, null, jettonMaster1.address, AMM.ConstantProduct))
+                await factory.getLiquidityDepositoryAddress(sender.address, null, jetton1.master.address, AMM.ConstantProduct))
         );
 
         let txs = await depository.sendWithdrawFunds(nonOwner.getSender(), toNano('1.0'));
@@ -414,7 +407,7 @@ describe('Test', () => {
                 null,
                 null
             ),
-            PoolParams.fromAddress(null, jettonMaster1.address, AMM.ConstantProduct)
+            PoolParams.fromAddress(null, jetton1.master.address, AMM.ConstantProduct)
         )
         let sendTx, vault
         if (type === 'native') {
@@ -427,21 +420,21 @@ describe('Test', () => {
             vault = nativeVault
         } else {
             const senderAddressJettonWallet1 = blockchain.openContract(
-                JettonWallet.createFromAddress(await jettonMaster1.getWalletAddress(sender.address))
+                JettonWallet.createFromAddress(await jetton1.master.getWalletAddress(sender.address))
             )
             sendTx = async() => senderAddressJettonWallet1.sendDepositLiquidityJetton(
                 sender.getSender(),
                 toNano(1),
-                jettonVault1.address,
+                jetton1.vault.address,
                 toNano(10),
                 params
             )
-            vault = jettonVault1
+            vault = jetton1.vault
         }
         await sendTx()
         const depository = blockchain.openContract(
             LiquidityDepository.createFromAddress(
-                await factory.getLiquidityDepositoryAddress(sender.address, null, jettonMaster1.address, AMM.ConstantProduct)
+                await factory.getLiquidityDepositoryAddress(sender.address, null, jetton1.master.address, AMM.ConstantProduct)
             )
         )
         const depositTxs = await sendTx()
@@ -496,8 +489,8 @@ describe('Test', () => {
                 }
             )
         } else {
-            const vaultWalletAddress = await jettonMaster1.getWalletAddress(vault.address)
-            const senderWalletAddress = await jettonMaster1.getWalletAddress(sender.address)
+            const vaultWalletAddress = await jetton1.master.getWalletAddress(vault.address)
+            const senderWalletAddress = await jetton1.master.getWalletAddress(sender.address)
             expect(depositTxs.transactions).toHaveTransaction(
                 {
                     from: vault.address,

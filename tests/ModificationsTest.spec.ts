@@ -3,13 +3,13 @@ import {Address, beginCell, Cell, Slice, toNano} from '@ton/core';
 import '@ton/test-utils';
 import {Factory} from "../wrappers/Factory";
 import {VaultNative} from "../wrappers/VaultNative";
-import {JettonMaster, JettonWallet} from "../wrappers/Jetton";
-import {VaultJetton} from "../wrappers/VaultJetton";
 import {AMM, AssetJetton, AssetNative, Fee, Fees, PoolParams} from "../wrappers/types";
-import {CodeCells, compileCodes, deployJetton} from "./utils";
+import {CodeCells, compileCodes} from "./utils";
 import {compile} from "@ton/blueprint";
 import {printTransactions} from "../wrappers/utils";
 import {TestContract} from "../wrappers/unit/TestContract";
+import { deployExtraVault, deployJettonWithVault, deployNativeVault, JettonDataWithVault } from './helpers';
+import { VaultExtra } from '../wrappers/VaultExtra';
 
 describe('Test', () => {
     let codeCells: CodeCells;
@@ -24,8 +24,10 @@ describe('Test', () => {
     let user: SandboxContract<TreasuryContract>;
     let factory: SandboxContract<Factory>;
 
-    let jettonMaster1: SandboxContract<JettonMaster>;
-    let jettonMaster2: SandboxContract<JettonMaster>;
+    let jetton1: JettonDataWithVault
+    let jetton2: JettonDataWithVault
+    let nativeVault: SandboxContract<VaultNative>
+    let extraVault: SandboxContract<VaultExtra>
 
     let feesVariables = [
         [null as number|null, null as number|null, AMM.ConstantProduct],
@@ -55,51 +57,44 @@ describe('Test', () => {
         );
         await factory.sendDeploy(admin.getSender(), toNano(1.0));
 
-        let deploy = await deployJetton(blockchain, admin, "TST1");
-        jettonMaster1 = deploy.master;
-        deploy = await deployJetton(blockchain, admin, "TST1");
-        jettonMaster2 = deploy.master;
-
-        await factory.sendCreateVault(admin.getSender(), toNano(.04), null);
-        await factory.sendCreateVault(admin.getSender(), toNano(.04), jettonMaster1.address);
-        await factory.sendCreateVault(admin.getSender(), toNano(.04), jettonMaster2.address);
-        await factory.sendCreateVault(admin.getSender(), toNano(.04), 8n);
-
-        let vaultNative = blockchain.openContract(VaultNative.createFromAddress(await factory.getVaultAddress(null)));
-        let vaultJetton1 = blockchain.openContract(VaultJetton.createFromAddress(await factory.getVaultAddress(jettonMaster1.address)));
-        let vaultJetton2 = blockchain.openContract(VaultJetton.createFromAddress(await factory.getVaultAddress(jettonMaster2.address)));
-        let vaultExtra = blockchain.openContract(VaultJetton.createFromAddress(await factory.getVaultAddress(8n)));
-
-        let adminJettonWallet1 = blockchain.openContract(
-            JettonWallet.createFromAddress(
-                await blockchain.openContract(
-                    JettonMaster.createFromAddress(jettonMaster1.address)).getWalletAddress(admin.address)
-            )
+        jetton1 = await deployJettonWithVault(
+            blockchain,
+            factory,
+            admin,
+            'TST1'
         )
+        jetton2 = await deployJettonWithVault(
+            blockchain,
+            factory,
+            admin,
+            'TST2'
+        )
+        nativeVault = await deployNativeVault(blockchain, factory, admin)
+        extraVault = await deployExtraVault(blockchain, factory, admin, 8n)
 
         // native -> jetton1 volatile
         {
-            await adminJettonWallet1.sendCreatePoolJetton(admin.getSender(),
+            await jetton1.wallet.sendCreatePoolJetton(admin.getSender(),
                 toNano(1),
-                vaultJetton1.address,
+                jetton1.vault.address,
                 toNano(5),
                 admin.address,
                 new PoolParams(
                     AssetNative.INSTANCE,
-                    AssetJetton.fromAddress(jettonMaster1.address),
+                    AssetJetton.fromAddress(jetton1.master.address),
                     AMM.ConstantProduct
                 ),
                 null,
                 null
             )
-            await vaultNative.sendCreatePoolNative(
+            await nativeVault.sendCreatePoolNative(
                 admin.getSender(),
                 toNano(6),
                 toNano(5),
                 admin.address,
                 new PoolParams(
                     AssetNative.INSTANCE,
-                    AssetJetton.fromAddress(jettonMaster1.address),
+                    AssetJetton.fromAddress(jetton1.master.address),
                     AMM.ConstantProduct
                 ),
                 null,
@@ -109,27 +104,27 @@ describe('Test', () => {
 
         // native -> jetton1 stable
         {
-            await adminJettonWallet1.sendCreatePoolJetton(admin.getSender(),
+            await jetton1.wallet.sendCreatePoolJetton(admin.getSender(),
                 toNano(1),
-                vaultJetton1.address,
+                jetton1.vault.address,
                 toNano(5),
                 admin.address,
                 new PoolParams(
                     AssetNative.INSTANCE,
-                    AssetJetton.fromAddress(jettonMaster1.address),
+                    AssetJetton.fromAddress(jetton1.master.address),
                     AMM.CurveFiStable
                 ),
                 beginCell().storeUint(2_000, 16).storeCoins(1).storeCoins(1).endCell(),
                 null
             )
-            await vaultNative.sendCreatePoolNative(
+            await nativeVault.sendCreatePoolNative(
                 admin.getSender(),
                 toNano(6),
                 toNano(5),
                 admin.address,
                 new PoolParams(
                     AssetNative.INSTANCE,
-                    AssetJetton.fromAddress(jettonMaster1.address),
+                    AssetJetton.fromAddress(jetton1.master.address),
                     AMM.CurveFiStable
                 ),
                 beginCell()
@@ -265,7 +260,7 @@ describe('Test', () => {
     });
 
     it('from factory update jetton vault, by admin, ok', async () => {
-        let address = (await factory.getVaultAddress(jettonMaster1.address));
+        let address = (await factory.getVaultAddress(jetton1.master.address));
         let txs = await factory.sendUpdateContract(admin.getSender(), toNano(1),
             address,
             testContractCode,
@@ -321,7 +316,7 @@ describe('Test', () => {
     it('from factory update pool, by admin, ok', async () => {
         let address = await factory.getPoolAddress(
             AssetNative.INSTANCE,
-            AssetJetton.fromAddress(jettonMaster1.address),
+            AssetJetton.fromAddress(jetton1.master.address),
             AMM.ConstantProduct
         );
         let txs = await factory.sendUpdateContract(admin.getSender(), toNano(1),
@@ -353,7 +348,7 @@ describe('Test', () => {
         let txs = await factory.sendUpdatePool(user.getSender(), toNano(1),
             new PoolParams(
                 AssetNative.INSTANCE,
-                AssetJetton.fromAddress(jettonMaster1.address),
+                AssetJetton.fromAddress(jetton1.master.address),
                 AMM.ConstantProduct
             ),
 
@@ -382,7 +377,7 @@ describe('Test', () => {
         let txs = await factory.sendUpdatePool(admin.getSender(), toNano(1),
             new PoolParams(
                 AssetNative.INSTANCE,
-                AssetJetton.fromAddress(jettonMaster1.address),
+                AssetJetton.fromAddress(jetton1.master.address),
                 AMM.ConstantProduct
             ),
 
@@ -403,7 +398,7 @@ describe('Test', () => {
         expect(txs.transactions).toHaveTransaction({
             from: factory.address,
             to: await factory.getPoolAddress(AssetNative.INSTANCE,
-                AssetJetton.fromAddress(jettonMaster1.address),
+                AssetJetton.fromAddress(jetton1.master.address),
                 AMM.ConstantProduct),
             success: true,
             exitCode: 0
@@ -412,7 +407,7 @@ describe('Test', () => {
         let pool = blockchain.openContract(
             await factory.getPoolJettonBased(
                 AssetNative.INSTANCE,
-                AssetJetton.fromAddress(jettonMaster1.address),
+                AssetJetton.fromAddress(jetton1.master.address),
                 AMM.ConstantProduct
             )
         );
@@ -426,7 +421,7 @@ describe('Test', () => {
         let pool = blockchain.openContract(
             await factory.getPoolJettonBased(
                 AssetNative.INSTANCE,
-                AssetJetton.fromAddress(jettonMaster1.address),
+                AssetJetton.fromAddress(jetton1.master.address),
                 t as AMM
             )
         );
@@ -434,7 +429,7 @@ describe('Test', () => {
         let txs = await factory.sendUpdatePool(admin.getSender(), toNano(1),
             new PoolParams(
                 AssetNative.INSTANCE,
-                AssetJetton.fromAddress(jettonMaster1.address),
+                AssetJetton.fromAddress(jetton1.master.address),
                 t as AMM
             ),
             null,
@@ -455,7 +450,7 @@ describe('Test', () => {
         expect(txs.transactions).toHaveTransaction({
             from: factory.address,
             to: await factory.getPoolAddress(AssetNative.INSTANCE,
-                AssetJetton.fromAddress(jettonMaster1.address),
+                AssetJetton.fromAddress(jetton1.master.address),
                 t as AMM),
             success: true,
             exitCode: 0
@@ -477,7 +472,7 @@ describe('Test', () => {
         let pool = blockchain.openContract(
             await factory.getPoolJettonBased(
                 AssetNative.INSTANCE,
-                AssetJetton.fromAddress(jettonMaster1.address),
+                AssetJetton.fromAddress(jetton1.master.address),
                 t as AMM
             )
         );
@@ -485,7 +480,7 @@ describe('Test', () => {
         let txs = await factory.sendUpdatePool(admin.getSender(), toNano(1),
             new PoolParams(
                 AssetNative.INSTANCE,
-                AssetJetton.fromAddress(jettonMaster1.address),
+                AssetJetton.fromAddress(jetton1.master.address),
                 t as AMM
             ),
 
@@ -506,7 +501,7 @@ describe('Test', () => {
         expect(txs.transactions).toHaveTransaction({
             from: factory.address,
             to: await factory.getPoolAddress(AssetNative.INSTANCE,
-                AssetJetton.fromAddress(jettonMaster1.address),
+                AssetJetton.fromAddress(jetton1.master.address),
                 t as AMM),
             success: true,
             exitCode: 0
@@ -560,7 +555,7 @@ describe('Test', () => {
 
     test('withdraw from jetton vault, by admin, ok', async () => {
         let txs = await factory.sendWithdraw(admin.getSender(), toNano(1),
-            AssetJetton.fromAddress(jettonMaster1.address), 1n, user.address);
+            AssetJetton.fromAddress(jetton1.master.address), 1n, user.address);
         printTransactions(txs.transactions);
         expect(txs.transactions).toHaveTransaction({
             from: admin.address,
@@ -570,19 +565,19 @@ describe('Test', () => {
         })
         expect(txs.transactions).toHaveTransaction({
             from: factory.address,
-            to: (await factory.getVaultAddress(jettonMaster1.address)),
+            to: (await factory.getVaultAddress(jetton1.master.address)),
             success: true,
             exitCode: 0
         })
         expect(txs.transactions).toHaveTransaction({
-            from: (await factory.getVaultAddress(jettonMaster1.address)),
-            to: await jettonMaster1.getWalletAddress(await factory.getVaultAddress(jettonMaster1.address)),
+            from: (await factory.getVaultAddress(jetton1.master.address)),
+            to: await jetton1.master.getWalletAddress(await factory.getVaultAddress(jetton1.master.address)),
             success: true,
             exitCode: 0
         })
         expect(txs.transactions).toHaveTransaction({
-            from: await jettonMaster1.getWalletAddress(await factory.getVaultAddress(jettonMaster1.address)),
-            to: await jettonMaster1.getWalletAddress(user.address),
+            from: await jetton1.master.getWalletAddress(await factory.getVaultAddress(jetton1.master.address)),
+            to: await jetton1.master.getWalletAddress(user.address),
             success: true,
             exitCode: 0
         })

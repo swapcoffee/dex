@@ -1,6 +1,7 @@
 #include "include/commons.fc";
 #include "include/constants.fc";
 #include "include/messages.fc";
+#include "include/stdlib.fc";
 
 global cell storage::init_code_cell;
 global cell storage::init_data_cell;
@@ -101,7 +102,8 @@ global int storage::amount2;
                     continue(query_id, params);
                 }
             } else {
-                payout(query_id, recipient, asset, amount, SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
+                reserve_for_carry_inbound_without_value();
+                payout(query_id, recipient, asset, amount, SEND_MODE_CARRY_ALL_BALANCE);
                 commit();
                 throw(errors::invalid_liquidity);
             }
@@ -114,7 +116,8 @@ global int storage::amount2;
                     continue(query_id, params);
                 }
             } else {
-                payout(query_id, recipient, asset, amount, SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE);
+                reserve_for_carry_inbound_without_value();
+                payout(query_id, recipient, asset, amount, SEND_MODE_CARRY_ALL_BALANCE);
                 commit();
                 throw(errors::invalid_liquidity);
             }
@@ -138,6 +141,7 @@ global int storage::amount2;
         payout(query_id, sender_address, asset, amount, SEND_MODE_SELF_DESTROY);
     } elseif (opcode == opcodes::update_contract_internal) {
         throw_unless(errors::not_a_factory, equal_slice_bits(storage::factory_address, sender_address));
+        reserve_for_carry_inbound_without_value();
         update_contract(query_id, in_msg_body~load_msg_addr(), in_msg_body);
     } else {
         throw(errors::unknown_opcode);

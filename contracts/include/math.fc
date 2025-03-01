@@ -1,6 +1,5 @@
 #include "stdlib.fc";
 
-int mulmodpow2(int x, int y, int z) asm "MULMODPOW2";
 (int, int) muladddivmod(int x, int y, int w, int z) asm "MULADDDIVMOD";
 int mulrshiftr(int x, int y, int z) asm "MULRSHIFTR";
 int ubitsize(int x) asm "UBITSIZE";

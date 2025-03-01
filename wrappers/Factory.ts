@@ -63,16 +63,17 @@ export class Factory implements Contract {
         return new Factory(contractAddress(workchain, init), init);
     }
 
-    async sendMessage(provider: ContractProvider, via: Sender, value: bigint, body: Cell) {
+    async sendMessage(provider: ContractProvider, via: Sender, value: bigint, body: Cell, bounce: boolean = true) {
         await provider.internal(via, {
             value,
-            sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: body
+            bounce,
+            body,
+            sendMode: SendMode.PAY_GAS_SEPARATELY
         });
     }
 
     async sendDeploy(provider: ContractProvider, via: Sender, value: bigint) {
-        await this.sendMessage(provider, via, value, beginCell().endCell());
+        await this.sendMessage(provider, via, value, beginCell().endCell(), false);
     }
 
     async sendCreateVault(provider: ContractProvider, via: Sender, value: bigint, asset: any) {
