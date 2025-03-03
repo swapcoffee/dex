@@ -72,7 +72,7 @@ int get_extra_currency_amount(cell extra_currencies) inline {
             notification_fwd_gas = s~load_coins();
         }
 
-        verify_proof(storage::factory_address, storage::init_code_cell, sender_address, in_msg_body~load_maybe_ref(), true);
+        verify_proof(storage::factory_address, storage::init_code_cell, sender_address, in_msg_body~load_maybe_ref());
         if (cell_null?(notification)) {
             send_builder_extra_carry_inbound(
                 recipient,

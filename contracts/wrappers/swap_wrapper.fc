@@ -33,9 +33,9 @@
     return get_direction_from_proof(cs, previous_asset_hint);
 }
 
-(int, int, int, int, int) get_perform_swap(int direction, int amount, int min_out_amount) method_id {
+(int, int, int, int, int, int) get_perform_swap(int direction, int amount, int min_out_amount) method_id {
     load_data();
-    (int excno, int a, int b, int c, int d, int f) = perform_swap(direction, amount, min_out_amount);
+    (int excno, int a, int b, int c, int d, int e, int f) = perform_swap(direction, amount, min_out_amount);
     throw_unless(excno, excno == 0);
-    return (a, b, c, d, f);
+    return (a, b, c, d, e, f);
 }

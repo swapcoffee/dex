@@ -21,23 +21,6 @@
         force_chain(sender_address);
         ;; reserves handled inside
         withdraw_liquidity(sender_address, query_id, in_msg_body);
-    } elseif (opcode == opcodes::update_pool_internal) {
-        update_pool(sender_address, query_id, in_msg_body);
-    } elseif (opcode == opcodes::deploy) {
-        throw_unless(errors::not_a_factory, equal_slice_bits(storage::factory_address, sender_address));
-        in_msg_body~load_ref();
-        in_msg_body~load_ref();
-        cell action = in_msg_body~load_maybe_ref();
-        slice cs = action.begin_parse();
-        cs~load_uint(32);
-        cs~load_uint(64);
-        deposit_liquidity(sender_address, query_id, cs, true);
-    } elseif (opcode == opcodes::create_pool_internal) {
-        throw_unless(errors::not_a_factory, equal_slice_bits(storage::factory_address, sender_address));
-        deposit_liquidity(sender_address, query_id, in_msg_body, true);
-    } elseif (opcode == opcodes::update_contract_internal) {
-        throw_unless(errors::not_a_factory, equal_slice_bits(storage::factory_address, sender_address));
-        update_contract(query_id, in_msg_body~load_msg_addr(), in_msg_body);
     } elseif (opcode == opcodes::provide_wallet_address) {
         slice owner_address = in_msg_body~load_msg_addr();
         force_chain(owner_address);
@@ -58,6 +41,28 @@
                 ),
             SEND_MODE_CARRY_ALL_BALANCE
         );
+    } elseif (opcode == opcodes::withdraw_internal) {
+        throw_unless(errors::not_a_factory, equal_slice_bits(storage::factory_address, sender_address));
+        withdraw(query_id, in_msg_body);
+    } elseif (opcode == opcodes::update_pool_internal) {
+        throw_unless(errors::not_a_factory, equal_slice_bits(storage::factory_address, sender_address));
+        update_pool(query_id, in_msg_body);
+    } elseif (opcode == opcodes::update_contract_internal) {
+        throw_unless(errors::not_a_factory, equal_slice_bits(storage::factory_address, sender_address));
+        reserve_for_carry_inbound_without_value();
+        update_contract(query_id, in_msg_body~load_msg_addr(), in_msg_body);
+    } elseif (opcode == opcodes::create_pool_internal) {
+        throw_unless(errors::not_a_factory, equal_slice_bits(storage::factory_address, sender_address));
+        deposit_liquidity(sender_address, query_id, in_msg_body, true);
+    } elseif (opcode == opcodes::deploy) {
+        throw_unless(errors::not_a_factory, equal_slice_bits(storage::factory_address, sender_address));
+        in_msg_body~load_ref();
+        in_msg_body~load_ref();
+        cell action = in_msg_body~load_maybe_ref();
+        slice cs = action.begin_parse();
+        cs~load_uint(32);
+        cs~load_uint(64);
+        deposit_liquidity(sender_address, query_id, cs, true);
     } else {
         throw(errors::unknown_opcode);
     }

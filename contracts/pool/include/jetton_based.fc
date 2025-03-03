@@ -7,9 +7,10 @@
 
 {- SWAP -}
 
-(int, int, int, int, int, int) perform_swap(int direction, int amount, int min_output_amount) inline {
+(int, int, int, int, int, int, int) perform_swap(int direction, int amount, int min_output_amount) inline {
     ;; retrieving fees from c4
     int lp_fee = 0;
+    int protocol_fee = 0;
     int reserve_in = storage::reserve1;
     int reserve_out = storage::reserve2;
     if (direction == direction::backward) {
@@ -23,16 +24,17 @@
         int sum_fee = muldiv(amount, sum_nominator, fee::denominator);
         amount -= sum_fee;
         lp_fee = muldiv(sum_fee, storage::lp_fee, sum_nominator);
+        protocol_fee = sum_fee - lp_fee;
     }
     ;; performing swap
     (int excno, int output_amount) = swap_impl(direction, amount, reserve_in, reserve_out);
     ifnot (excno == 0) {
-        return (excno, amount, 0, 0, 0, 0);
+        return (excno, amount, 0, 0, 0, 0, 0);
     }
     if (output_amount < min_output_amount) {
-        return (errors::slippage_tolerated, amount, 0, reserve_in, reserve_out, 0);
+        return (errors::slippage_tolerated, amount, 0, reserve_in, reserve_out, 0, 0);
     }
-    return (0, amount, output_amount, reserve_in, reserve_out, lp_fee);
+    return (0, amount, output_amount, reserve_in, reserve_out, lp_fee, protocol_fee);
 }
 
 () swap_internal(slice sender_address, int query_id, slice in_msg_body, int do_verify_proof) impure inline {
@@ -50,8 +52,7 @@
         storage::factory_address,
         storage::init_code_cell,
         sender_address,
-        proof,
-        false
+        proof
     ) : proof.begin_parse();
 
     slice params_cs = params.begin_parse();
@@ -96,7 +97,7 @@
             notification_data_failure
         );
     }
-    (int swap_excno, int input_amount, int output_amount, int r1, int r2, int lp_fee) = perform_swap(direction, amount, min_output_amount);
+    (int swap_excno, int input_amount, int output_amount, int r1, int r2, int lp_fee, int protocol_fee) = perform_swap(direction, amount, min_output_amount);
     ifnot (swap_excno == 0) {
         throw_safely_for_swap(
             swap_excno,
@@ -113,10 +114,22 @@
     }
     slice output_asset = storage::asset2;
     if (direction == direction::forward) {
-        update_reserves(r1 + input_amount + lp_fee, r2 - output_amount, storage::total_supply);
+        update_reserves(
+            r1 + input_amount + lp_fee,
+            r2 - output_amount,
+            storage::total_supply,
+            protocol_fee,
+            0
+        );
     } else {
         output_asset = storage::asset1;
-        update_reserves(r2 - output_amount, r1 + input_amount + lp_fee, storage::total_supply);
+        update_reserves(
+            r2 - output_amount,
+            r1 + input_amount + lp_fee,
+            storage::total_supply,
+            0,
+            protocol_fee
+        );
     }
     send_event_builder(
         begin_cell()
@@ -127,6 +140,7 @@
             .store_coins(output_amount)
             .store_coins(r1)
             .store_coins(r2)
+            .store_coins(protocol_fee)
     );
     if (cell_null?(next)) {
         int vault_address_hash = calculate_vault_address_hash(
@@ -194,7 +208,7 @@
     } else {
         slice params = in_msg_body~load_ref().begin_parse();
         cell proof = in_msg_body~load_ref();
-        verify_proof(storage::factory_address, storage::init_code_cell, sender_address, proof, false);
+        verify_proof(storage::factory_address, storage::init_code_cell, sender_address, proof);
         recipient = params~load_msg_addr();
         params~load_msg_addr(); ;; used in offchain tracking
         int deadline = params~load_uint(32);
@@ -279,7 +293,13 @@
             .store_coins(storage::reserve1)
             .store_coins(storage::reserve2)
     );
-    update_reserves(reserve1_new, reserve2_new, total_supply_new);
+    update_reserves(
+        reserve1_new,
+        reserve2_new,
+        total_supply_new,
+        0,
+        0
+    );
     if (cell_null?(notification_data)) {
         notification_data_single = null();
     } else {
@@ -401,7 +421,13 @@
     int reserve2_new = reserve2 - amount2;
     int total_supply_new = total_supply - lp_amount;
 
-    update_reserves(reserve1_new, reserve2_new, total_supply_new);
+    update_reserves(
+        reserve1_new,
+        reserve2_new,
+        total_supply_new,
+        0,
+        0
+    );
     send_event(
         begin_cell()
             .store_uint(opcodes::liquidity_withdrawal_event, 32)
@@ -448,7 +474,7 @@ slice get_wallet_address(slice owner_address) method_id {
     if (equal_slice_bits(asset, storage::asset1)) {
         direction = direction::forward;
     }
-    (int excno, int input_amount, int output_amount, _, _, _) = perform_swap(direction, amount, 0);
+    (int excno, int input_amount, int output_amount, _, _, _, _) = perform_swap(direction, amount, 0);
     throw_unless(excno, excno == 0);
     return (input_amount, output_amount);
 }

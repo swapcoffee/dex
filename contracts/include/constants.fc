@@ -51,7 +51,7 @@ const int opcodes::swap_extra = 0xc0ffee01;
 ;; swap_internal#c0ffee20 query_id:uint64 _:SwapStepInternalParams params:^SwapParams proof:^Cell = SwapInternal;
 const int opcodes::swap_internal = 0xc0ffee20;
 ;; pool -> void
-;; swap_successful_event#c0ffee30 query_id:uint64 input:Asset input_amount:Coins output_amount:Coins reserves:PoolReserves = SwapSuccessfulEvent;
+;; swap_successful_event#c0ffee30 query_id:uint64 input:Asset input_amount:Coins output_amount:Coins reserves:PoolReserves protocol_fee:Coins = SwapSuccessfulEvent;
 const int opcodes::swap_successful_event = 0xc0ffee30;
 ;; pool -> void
 ;; swap_failed_event#c0ffee31 query_id:uint64 input:Asset input_amount:Coins reserves:(Maybe ^PoolReserves) = SwapFailedEvent;
@@ -139,8 +139,11 @@ const int opcodes::activate_vault = 0xc0ffee42;
 ;; activate_vault_internal#c0ffee2c query_id:uint64 wallet:MsgAddressInt = ActivateVaultInternal;
 const int opcodes::activate_vault_internal = 0xc0ffee2c;
 ;; withdrawer -> factory
-;; withdraw#c0ffee43 query_id:uint64 asset:Asset amount:Coins receiver:MsgAddressInt = Withdraw;
+;; withdraw#c0ffee43 query_id:uint64 pool_address:MsgAddressInt asset:Asset amount:Coins receiver:MsgAddressInt = Withdraw;
 const int opcodes::withdraw = 0xc0ffee43;
+;; factory -> pool
+;; withdraw_internal#c0ffee2d query_id:uint64 asset:Asset amount:Coins receiver:MsgAddressInt = WithdrawInternal;
+const int opcodes::withdraw_internal = 0xc0ffee2d;
 ;; admin -> factory
 ;; update_code_cell#c0ffee44 query_id:uint64 code_cell:^Cell = UpdateCodeCell;
 const int opcodes::update_code_cell = 0xc0ffee44;
@@ -148,8 +151,8 @@ const int opcodes::update_code_cell = 0xc0ffee44;
 ;; update_contract#c0ffee45 query_id:uint64 contract_address:MsgAddressInt _:ContractUpdate = UpdateContract;
 const int opcodes::update_contract = 0xc0ffee45;
 ;; factory -> any contract except init
-;; update_contract_internal#c0ffee2d query_id:uint64 excesses_receiver:MsgAddressInt _:ContractUpdate = UpdateContractInternal;
-const int opcodes::update_contract_internal = 0xc0ffee2d;
+;; update_contract_internal#c0ffee2e query_id:uint64 excesses_receiver:MsgAddressInt _:ContractUpdate = UpdateContractInternal;
+const int opcodes::update_contract_internal = 0xc0ffee2e;
 ;; admin -> factory
 ;; update_withdrawer#c0ffee46 query_id:uint64 address:MsgAddressInt = UpdateWithdrawer;
 const int opcodes::update_withdrawer = 0xc0ffee46;

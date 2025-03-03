@@ -158,10 +158,19 @@ export class Factory implements Contract {
         await this.sendMessage(provider, via, value, b.storeAddress(wallet).endCell());
     }
 
-    async sendWithdraw(provider: ContractProvider, via: Sender, value: bigint, asset: any, amount: bigint, receiver: Address) {
+    async sendWithdraw(
+        provider: ContractProvider,
+        via: Sender,
+        value: bigint,
+        pool: Address,
+        asset: any,
+        amount: bigint,
+        receiver: Address
+    ) {
         const b = beginCell()
             .storeUint(0xc0ffee43, 32)
             .storeUint(0, 64)
+            .storeAddress(pool)
         this.serializeAsset(b, asset)
         b.storeCoins(amount).storeAddress(receiver);
         await this.sendMessage(provider, via, value, b.endCell());

@@ -169,9 +169,9 @@ cell gen_contract_state_init(cell init_code_cell, cell init_data_cell) inline {
         .end_cell();
 }
 
-slice verify_proof(slice factory_address, cell init_code_cell, slice sender_address, cell proof, int allow_factory) impure inline {
+slice verify_proof(slice factory_address, cell init_code_cell, slice sender_address, cell proof) impure inline {
     if (cell_null?(proof)) {
-        throw_unless(errors::wrong_signature, allow_factory & equal_slice_bits(sender_address, factory_address));
+        throw(errors::wrong_signature);
         return null();
     } else {
         slice proof_slice = proof.begin_parse();

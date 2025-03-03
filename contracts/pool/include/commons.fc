@@ -1,7 +1,9 @@
 #include "storage.fc";
 #include "../../include/commons.fc";
+#include "../../include/constants.fc";
 #include "../../include/gas.fc";
 #include "../../include/reservation.fc";
+#include "../../include/stdlib.fc";
 
 {- UTILITY -}
 
@@ -147,8 +149,7 @@ int get_direction_from_proof(slice cs, slice previous_asset_hint) inline {
 
 {- ADMINISTRATIVE -}
 
-() update_pool(slice sender_address, int query_id, slice in_msg_body) impure inline {
-    throw_unless(errors::not_a_factory, equal_slice_bits(storage::factory_address, sender_address));
+() update_pool(int query_id, slice in_msg_body) impure inline {
     slice excesses_receiver = in_msg_body~load_msg_addr();
     slice params_cs = in_msg_body~load_ref().begin_parse();
     int flags = params_cs~load_uint(3);
@@ -180,6 +181,50 @@ int get_direction_from_proof(slice cs, slice previous_asset_hint) inline {
             SEND_MODE_CARRY_ALL_BALANCE
         );
     }
+}
+
+() withdraw(int query_id, slice in_msg_body) impure inline {
+    slice asset = in_msg_body~load_asset();
+    int amount = in_msg_body~load_coins();
+    slice receiver = in_msg_body~load_msg_addr();
+    if (equal_slice_bits(asset, storage::asset1)) {
+        throw_if(errors::invalid_fee, amount > storage::protocol_fee_collected::asset1);
+        update_reserves(
+            storage::reserve1,
+            storage::reserve2,
+            storage::total_supply,
+            - amount,
+            0
+        );
+    } elseif (equal_slice_bits(asset, storage::asset2)) {
+        throw_if(errors::invalid_fee, amount > storage::protocol_fee_collected::asset2);
+        update_reserves(
+            storage::reserve1,
+            storage::reserve2,
+            storage::total_supply,
+            0,
+            - amount
+        );
+    } else {
+        throw(errors::wrong_assets);
+    }
+    reserve_for_carry_inbound_without_value();
+    send_hash_builder(
+        calculate_vault_address_hash(
+            storage::factory_address,
+            storage::init_code_cell,
+            asset
+        ),
+        0,
+        build_payout_internal_body(
+            query_id,
+            receiver,
+            amount,
+            null(),
+            storage::init_data_cell
+        ),
+        SEND_MODE_CARRY_ALL_BALANCE
+    );
 }
 
 {- GET METHODS -}
