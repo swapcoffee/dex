@@ -95,7 +95,7 @@ global cell storage::pool_creator_code_cell;
 
         throw_unless(errors::not_an_admin, ((amm == amm::constant_product) & (is_active == 1) & cell_null?(extra_settings)) | equal_slice_bits(tx_initiator, storage::admin_address));
 
-        slice proof_cs = verify_proof(my_address(), storage::init_code_cell, sender_address, proof, false);
+        slice proof_cs = verify_proof(my_address(), storage::init_code_cell, sender_address, proof);
 
         throw_unless(errors::wrong_sender, proof_cs~load_uint(2) == contract_type::vault);
         slice asset = proof_cs~load_asset();
@@ -137,7 +137,7 @@ global cell storage::pool_creator_code_cell;
         (_, (slice asset1, slice asset2, int amm)) = parse_pool_params(pool_params.begin_parse());
         cell proof = in_msg_body~load_ref();
 
-        slice proof_cs = verify_proof(my_address(), storage::init_code_cell, sender_address, proof, false);
+        slice proof_cs = verify_proof(my_address(), storage::init_code_cell, sender_address, proof);
 
         throw_unless(errors::wrong_sender, proof_cs~load_uint(2) == contract_type::vault);
         slice asset = proof_cs~load_asset();
@@ -187,7 +187,7 @@ global cell storage::pool_creator_code_cell;
         cell amm_settings = creation_params_cs~load_maybe_ref();
         cell extra_settings = creation_params_cs~load_maybe_ref();
 
-        slice proof_cs = verify_proof(my_address(), storage::init_code_cell, sender_address, proof, false);
+        slice proof_cs = verify_proof(my_address(), storage::init_code_cell, sender_address, proof);
 
         throw_unless(errors::wrong_sender, proof_cs~load_uint(2) == contract_type::pool_creator);
         proof_cs = proof_cs~load_ref().begin_parse();
@@ -214,6 +214,8 @@ global cell storage::pool_creator_code_cell;
                         .store_coins(0) ;; total supply
                         .store_uint(200, 16) ;; 0.02% fee for protocol
                         .store_uint(800, 16) ;; 0.08% fee for lp
+                        .store_coins(0) ;; collected protocol fee in asset1
+                        .store_coins(0) ;; collected protocol fee int asset2
                         .store_ref(storage::lp_wallet_code_cell)
                         .end_cell()
                 )
@@ -363,22 +365,18 @@ global cell storage::pool_creator_code_cell;
     } elseif (opcode == opcodes::withdraw) {
         ;; ok
         throw_unless(errors::wrong_sender, equal_slice_bits(storage::withdrawer_address, sender_address));
+        slice pool_address = in_msg_body~load_msg_addr();
         slice asset = in_msg_body~load_asset();
         int amount = in_msg_body~load_coins();
         slice receiver = in_msg_body~load_msg_addr();
-        send_hash_builder(
-            calculate_vault_address_hash(
-                my_address(),
-                storage::init_code_cell,
-                asset
-            ),
-            0,
+        send_builder(
+            pool_address,
             begin_cell()
-                .store_uint(opcodes::payout_internal, 32)
+                .store_uint(opcodes::withdraw_internal, 32)
                 .store_uint(query_id, 64)
-                .store_slice(receiver)
+                .store_slice(asset)
                 .store_coins(amount)
-                .store_uint(0, 2),
+                .store_slice(receiver),
             SEND_MODE_CARRY_ALL_BALANCE
         );
     } else {

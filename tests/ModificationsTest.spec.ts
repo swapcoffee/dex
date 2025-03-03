@@ -3,7 +3,7 @@ import {Address, beginCell, Cell, Slice, toNano} from '@ton/core';
 import '@ton/test-utils';
 import {Factory} from "../wrappers/Factory";
 import {VaultNative} from "../wrappers/VaultNative";
-import {AMM, AssetJetton, AssetNative, Fee, Fees, PoolParams} from "../wrappers/types";
+import { AMM, AssetJetton, AssetNative, Fee, Fees, PoolParams, SwapParams, SwapStepParams } from '../wrappers/types';
 import {CodeCells, compileCodes} from "./utils";
 import {compile} from "@ton/blueprint";
 import {printTransactions} from "../wrappers/utils";
@@ -516,10 +516,19 @@ describe('Test', () => {
         }
     });
 
-
-    test('withdraw from vault, by non admin, fail', async () => {
-        let txs = await factory.sendWithdraw(user.getSender(), toNano(1),
-            AssetNative.INSTANCE, 1n, admin.address);
+    test('withdraw by non admin, fail', async () => {
+        let txs = await factory.sendWithdraw(
+            user.getSender(),
+            toNano(1),
+            await factory.getPoolAddress(
+                AssetNative.INSTANCE,
+                AssetJetton.fromAddress(jetton1.master.address),
+                AMM.CurveFiStable
+            ),
+            AssetNative.INSTANCE,
+            1n,
+            admin.address
+        );
         printTransactions(txs.transactions);
         expect(txs.transactions).toHaveTransaction({
             from: user.address,
@@ -529,9 +538,20 @@ describe('Test', () => {
         })
     });
 
-    test('withdraw from native vault, by admin, ok', async () => {
-        let txs = await factory.sendWithdraw(admin.getSender(), toNano(1),
-            AssetNative.INSTANCE, 1n, user.address);
+    test('withdraw by admin, ok', async () => {
+        const poolAddress = await factory.getPoolAddress(
+            AssetNative.INSTANCE,
+            AssetJetton.fromAddress(jetton1.master.address),
+            AMM.CurveFiStable
+        )
+        let txs = await factory.sendWithdraw(
+            admin.getSender(),
+            toNano(1),
+            poolAddress,
+            AssetNative.INSTANCE,
+            1n,
+            user.address
+        );
         printTransactions(txs.transactions);
         expect(txs.transactions).toHaveTransaction({
             from: admin.address,
@@ -541,59 +561,58 @@ describe('Test', () => {
         })
         expect(txs.transactions).toHaveTransaction({
             from: factory.address,
-            to: (await factory.getVaultAddress(null)),
+            to: poolAddress,
+            success: false,
+            exitCode: 265
+        })
+        await nativeVault.sendSwapNative(
+            user.getSender(),
+            toNano(1.2),
+            toNano(1),
+            new SwapStepParams(
+                await factory.getPoolAddressHash(
+                    AssetNative.INSTANCE,
+                    AssetJetton.fromAddress(jetton1.master.address),
+                    AMM.CurveFiStable
+                ),
+                0n,
+                null
+            ),
+            new SwapParams(BigInt((1 << 30) * 2), user.address, null, null)
+        )
+        txs = await factory.sendWithdraw(
+            admin.getSender(),
+            toNano(1),
+            poolAddress,
+            AssetNative.INSTANCE,
+            toNano(.0002),
+            user.address
+        );
+        printTransactions(txs.transactions);
+        expect(txs.transactions).toHaveTransaction({
+            from: admin.address,
+            to: factory.address,
             success: true,
             exitCode: 0
         })
         expect(txs.transactions).toHaveTransaction({
-            from: (await factory.getVaultAddress(null)),
+            from: factory.address,
+            to: poolAddress,
+            success: true,
+            exitCode: 0
+        })
+        expect(txs.transactions).toHaveTransaction({
+            from: poolAddress,
+            to: nativeVault.address,
+            success: true,
+            exitCode: 0
+        })
+        expect(txs.transactions).toHaveTransaction({
+            from: nativeVault.address,
             to: user.address,
             success: true,
             exitCode: 0
         })
     });
-
-    test('withdraw from jetton vault, by admin, ok', async () => {
-        let txs = await factory.sendWithdraw(admin.getSender(), toNano(1),
-            AssetJetton.fromAddress(jetton1.master.address), 1n, user.address);
-        printTransactions(txs.transactions);
-        expect(txs.transactions).toHaveTransaction({
-            from: admin.address,
-            to: factory.address,
-            success: true,
-            exitCode: 0
-        })
-        expect(txs.transactions).toHaveTransaction({
-            from: factory.address,
-            to: (await factory.getVaultAddress(jetton1.master.address)),
-            success: true,
-            exitCode: 0
-        })
-        expect(txs.transactions).toHaveTransaction({
-            from: (await factory.getVaultAddress(jetton1.master.address)),
-            to: await jetton1.master.getWalletAddress(await factory.getVaultAddress(jetton1.master.address)),
-            success: true,
-            exitCode: 0
-        })
-        expect(txs.transactions).toHaveTransaction({
-            from: await jetton1.master.getWalletAddress(await factory.getVaultAddress(jetton1.master.address)),
-            to: await jetton1.master.getWalletAddress(user.address),
-            success: true,
-            exitCode: 0
-        })
-    });
-
-
-    function preloadFee(fee: Slice) {
-        let b = beginCell();
-        let flags = fee.loadUint(4);
-        b.storeUint(flags, 4);
-        for (let i = 0; i < 4; i++) {
-            if (flags & (1 << i)) {
-                b.storeUint(fee.loadUint(16), 16);
-            }
-        }
-        return b;
-    }
 
 });

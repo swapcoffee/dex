@@ -696,6 +696,7 @@ describe('Test', () => {
                 totalSupply,
 
                 protocolFee, lpFee,
+                0n, 0n,
                 codeCells.init
             )
         );

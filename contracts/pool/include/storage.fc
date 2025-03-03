@@ -19,6 +19,8 @@ global int storage::total_supply;
 global cell storage::lp_wallet_code;
 global int storage::protocol_fee;
 global int storage::lp_fee;
+global int storage::protocol_fee_collected::asset1;
+global int storage::protocol_fee_collected::asset2;
 
 () load_data() impure inline {
     slice data_cs = get_data().begin_parse();
@@ -33,6 +35,8 @@ global int storage::lp_fee;
     storage::total_supply = data_cs~load_coins();
     storage::protocol_fee = data_cs~load_uint(16);
     storage::lp_fee = data_cs~load_uint(16);
+    storage::protocol_fee_collected::asset1 = data_cs~load_coins();
+    storage::protocol_fee_collected::asset2 = data_cs~load_coins();
     storage::lp_wallet_code = data_cs~load_ref();
 }
 
@@ -48,12 +52,20 @@ global int storage::lp_fee;
             .store_coins(storage::total_supply)
             .store_uint(protocol_fee, 16)
             .store_uint(lp_fee, 16)
+            .store_coins(storage::protocol_fee_collected::asset1)
+            .store_coins(storage::protocol_fee_collected::asset2)
             .store_ref(storage::lp_wallet_code)
             .end_cell()
     );
 }
 
-() update_reserves(int reserve1, int reserve2, int total_supply) impure inline {
+() update_reserves(
+    int reserve1,
+    int reserve2,
+    int total_supply,
+    int protocol_fee_collected_delta1,
+    int protocol_fee_collected_delta2
+) impure inline {
     set_data(
         begin_cell()
             .store_ref(storage::init_code_cell)
@@ -65,6 +77,8 @@ global int storage::lp_fee;
             .store_coins(total_supply)
             .store_uint(storage::protocol_fee, 16)
             .store_uint(storage::lp_fee, 16)
+            .store_coins(storage::protocol_fee_collected::asset1 + protocol_fee_collected_delta1)
+            .store_coins(storage::protocol_fee_collected::asset2 + protocol_fee_collected_delta2)
             .store_ref(storage::lp_wallet_code)
             .end_cell()
     );

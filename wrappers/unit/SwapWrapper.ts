@@ -15,7 +15,6 @@ export class SwapWrapper implements Contract {
     constructor(readonly address: Address, readonly init?: { code: Cell; data: Cell }) {
     }
 
-
     static createFromConfig(code: Cell,
                             factoryAddress: Address,
                             asset1: Slice,
@@ -27,6 +26,8 @@ export class SwapWrapper implements Contract {
                             totalSupply: bigint,
                             protocolFee: number,
                             lpFee: number,
+                            collectedProtocolFee1: bigint = 0n,
+                            collectedProtocolFee2: bigint = 0n,
                             initCodeCell: Cell = beginCell().endCell()
     ) {
         const data = beginCell()
@@ -46,6 +47,8 @@ export class SwapWrapper implements Contract {
             .storeCoins(totalSupply)
             .storeUint(protocolFee, 16) // protocol fee
             .storeUint(lpFee, 16) // lp fee
+            .storeCoins(collectedProtocolFee1)
+            .storeCoins(collectedProtocolFee2)
             .storeRef(beginCell().endCell()) // lp wallet code
             .endCell();
 
