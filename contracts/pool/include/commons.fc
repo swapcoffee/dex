@@ -1,9 +1,7 @@
 #include "storage.fc";
 #include "../../include/commons.fc";
-#include "../../include/constants.fc";
 #include "../../include/gas.fc";
 #include "../../include/reservation.fc";
-#include "../../include/stdlib.fc";
 
 {- UTILITY -}
 
