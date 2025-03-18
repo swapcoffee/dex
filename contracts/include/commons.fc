@@ -340,13 +340,3 @@ slice address_to_hex_string(int value) {
     }
     return b.end_cell().begin_parse().preload_bits(512);
 }
-
-int are_nullable_cells_same(cell a, cell b) inline {
-    int a_null = cell_null?(a);
-    int b_null = cell_null?(b);
-    if (a_null) {
-        return b_null;
-    } else {
-        return (~ b_null) & (cell_hash(a) == cell_hash(b));
-    }
-}
