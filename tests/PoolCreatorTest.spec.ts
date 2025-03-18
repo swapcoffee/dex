@@ -660,7 +660,7 @@ describe('Test', () => {
             ammSettings = null;
         }
 
-        const poolCreatorAddress = await factory.getPoolCreatorAddress(user.address, null, jetton1.master.address, ammType, ammSettings)
+        const poolCreatorAddress = await factory.getPoolCreatorAddress(admin.address, null, jetton1.master.address, ammType, ammSettings)
         const depository = blockchain.openContract(PoolCreator.createFromAddress(poolCreatorAddress))
 
         let tx1;
@@ -778,7 +778,7 @@ describe('Test', () => {
             ['volatile', 'jetton'],
             ['volatile', 'native'],
         ],
-    )('try withdraw funds jetton+native pool: %s, first: %s, by admin in favor of user, by admin, fail', async (type, order) => {
+    )('try withdraw funds jetton+native pool: %s, first: %s, by admin in favor of user, by user, fail', async (type, order) => {
         let ammType;
         let ammSettings;
         if(type === 'stable') {
@@ -796,7 +796,7 @@ describe('Test', () => {
 
         const depository = blockchain.openContract(
             PoolCreator.createFromAddress(
-                await factory.getPoolCreatorAddress(user.address, null, jetton1.master.address, ammType, ammSettings)
+                await factory.getPoolCreatorAddress(admin.address, null, jetton1.master.address, ammType, ammSettings)
             )
         )
         if(order === 'native') {
@@ -821,10 +821,10 @@ describe('Test', () => {
                 null
             );
         }
-        let withdrawTx = await depository.sendWithdrawFunds(admin.getSender(), toNano(1));
+        let withdrawTx = await depository.sendWithdrawFunds(user.getSender(), toNano(1));
         expect(withdrawTx.transactions).toHaveTransaction(
             {
-                from: admin.getSender().address,
+                from: user.address,
                 to: depository.address,
                 exitCode: 252,
                 success: false,
@@ -839,7 +839,7 @@ describe('Test', () => {
             ['volatile', 'jetton'],
             ['volatile', 'native'],
         ],
-    )('try withdraw funds jetton+native pool: %s, first: %s, by admin in favor of user, by user, ok', async (type, order) => {
+    )('try withdraw funds jetton+native pool: %s, first: %s, by admin in favor of user, by admin, ok', async (type, order) => {
         let ammType;
         let ammSettings;
         if(type === 'stable') {
@@ -855,7 +855,7 @@ describe('Test', () => {
             ammSettings = null;
         }
 
-        const poolCreatorAddress = await factory.getPoolCreatorAddress(user.address, null, jetton1.master.address, ammType, ammSettings)
+        const poolCreatorAddress = await factory.getPoolCreatorAddress(admin.address, null, jetton1.master.address, ammType, ammSettings)
         const depository = blockchain.openContract(PoolCreator.createFromAddress(poolCreatorAddress))
         if (order === 'native') {
             await nativeVault.sendCreatePoolNative(
@@ -879,10 +879,10 @@ describe('Test', () => {
                 null
             );
         }
-        let withdrawTx = await depository.sendWithdrawFunds(user.getSender(), toNano(1));
+        let withdrawTx = await depository.sendWithdrawFunds(admin.getSender(), toNano(1));
         expect(withdrawTx.transactions).toHaveTransaction(
             {
-                from: user.getSender().address,
+                from: admin.address,
                 to: depository.address,
                 exitCode: 0,
                 success: true,

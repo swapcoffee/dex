@@ -104,7 +104,7 @@ const int opcodes::deposit_liquidity_jetton = 0xc0ffee12;
 ;; deposit_liquidity_extra#c0ffee05 query_id:uint64 params:DepositLiquidityParams = DepositLiquidityExtra;
 const int opcodes::deposit_liquidity_extra = 0xc0ffee05;
 ;; vault_native/vault_jetton -> factory
-;; create_liquidity_depository_request#c0ffee27 query_id:uint64 amount:Coins params:DepositLiquidityParams proof:^Cell = CreateLiquidityDepositoryRequest;
+;; create_liquidity_depository_request#c0ffee27 query_id:uint64 amount:Coins params:DepositLiquidityParams sender:MsgAddressInt proof:^Cell = CreateLiquidityDepositoryRequest;
 const int opcodes::create_liquidity_depository_request = 0xc0ffee27;
 ;; factory -> liquidity_repository
 ;; create_liquidity_depository_internal#c0ffee28 query_id:uint64 asset:Asset amount:Coins params:^DepositLiquidityParamsTrimmed = CreateLiquidityDepositoryInternal;

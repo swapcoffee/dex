@@ -87,8 +87,8 @@ global cell storage::pool_creator_code_cell;
         cell proof = in_msg_body~load_ref();
 
         slice creation_params_cs = creation_params.begin_parse();
-        slice recipient = creation_params_cs~load_msg_addr();
-        cell notification_data = creation_params_cs~load_maybe_ref();
+        creation_params_cs~load_msg_addr(); ;; recipient
+        creation_params_cs~load_maybe_ref(); ;; notification_data
         int is_active = creation_params_cs~load_uint(1);
         cell extra_settings = creation_params_cs~load_maybe_ref();
 
@@ -99,7 +99,7 @@ global cell storage::pool_creator_code_cell;
         throw_unless(errors::wrong_sender, proof_cs~load_uint(2) == contract_type::vault);
         slice asset = proof_cs~load_asset();
 
-        cell init_data = gen_pool_creator_init_data(my_address(), recipient, asset1, asset2, amm, amm_settings);
+        cell init_data = gen_pool_creator_init_data(my_address(), tx_initiator, asset1, asset2, amm, amm_settings);
         cell state_init = gen_contract_state_init(storage::init_code_cell, init_data);
         int destination_hash = cell_hash(state_init);
 
@@ -133,6 +133,7 @@ global cell storage::pool_creator_code_cell;
         cell params = in_msg_body~load_ref();
         cell pool_params = in_msg_body~load_ref();
         (_, (slice asset1, slice asset2, int amm, cell amm_settings)) = parse_pool_params(pool_params.begin_parse());
+        slice tx_initiator = in_msg_body~load_msg_addr();
         cell proof = in_msg_body~load_ref();
 
         slice proof_cs = verify_proof(my_address(), storage::init_code_cell, sender_address, proof);
@@ -140,9 +141,7 @@ global cell storage::pool_creator_code_cell;
         throw_unless(errors::wrong_sender, proof_cs~load_uint(2) == contract_type::vault);
         slice asset = proof_cs~load_asset();
 
-        (_, slice recipient) = load_msg_addr(params.begin_parse());
-
-        cell init_data = gen_liquidity_depository_init_data(my_address(), recipient, asset1, asset2, amm, amm_settings);
+        cell init_data = gen_liquidity_depository_init_data(my_address(), tx_initiator, asset1, asset2, amm, amm_settings);
         cell state_init = gen_contract_state_init(storage::init_code_cell, init_data);
         int destination_hash = cell_hash(state_init);
 

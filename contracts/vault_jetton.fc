@@ -152,6 +152,7 @@ global slice storage::jetton_wallet_address;
                             .store_maybe_ref(amm_settings)
                             .end_cell() : pool_params
                     )
+                    .store_slice(from_addr)
                     .store_ref(storage::init_data_cell),
                 SEND_MODE_CARRY_ALL_BALANCE
             );

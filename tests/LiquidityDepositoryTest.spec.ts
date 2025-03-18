@@ -89,7 +89,8 @@ describe('Test', () => {
             PoolParams.fromAddress(jetton1.master.address, jetton2.master.address, AMM.ConstantProduct)
         )
 
-        let txs = await senderAddressJettonWallet1.sendDepositLiquidityJetton(sender.getSender(),
+        let txs = await senderAddressJettonWallet1.sendDepositLiquidityJetton(
+            sender.getSender(),
             toNano(1),
             jetton1.vault.address,
             toNano(10),
