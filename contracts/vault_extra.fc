@@ -136,7 +136,7 @@ int get_extra_currency_amount(cell extra_currencies) inline {
         cell liquidity_params = in_msg_body~load_ref();
         cell pool_params = in_msg_body~load_ref();
 
-        (_, (slice asset1, slice asset2, int amm)) = parse_pool_params(pool_params.begin_parse());
+        (_, (slice asset1, slice asset2, int amm, cell amm_settings)) = parse_pool_params(pool_params.begin_parse());
         throw_if(errors::same_assets, equal_slice_bits(asset1, asset2));
         (asset1, asset2, int sorted) = sort_assets(asset1, asset2);
 
@@ -152,6 +152,7 @@ int get_extra_currency_amount(cell extra_currencies) inline {
                         .store_slice(asset1)
                         .store_slice(asset2)
                         .store_uint(amm, 3)
+                        .store_maybe_ref(amm_settings)
                         .end_cell() : pool_params
                 )
                 .store_ref(storage::init_data_cell),
@@ -163,13 +164,12 @@ int get_extra_currency_amount(cell extra_currencies) inline {
         int amount = get_extra_currency_amount(extra_currencies);
         throw_unless(errors::invalid_balance, amount > 0);
 
-        (slice asset1, slice asset2, int amm) = in_msg_body~parse_pool_params();
+        (slice asset1, slice asset2, int amm, cell amm_settings) = in_msg_body~parse_pool_params();
         throw_if(errors::same_assets, equal_slice_bits(asset1, asset2));
         (asset1, asset2, _) = sort_assets(asset1, asset2);
         slice recipient = in_msg_body~load_msg_addr();
         cell notification_data = in_msg_body~load_maybe_ref();
         int is_active = in_msg_body~load_uint(1);
-        cell amm_settings = in_msg_body~load_maybe_ref();
         cell extra_settings = in_msg_body~load_maybe_ref();
 
         send_cell_carry_inbound(
@@ -181,12 +181,12 @@ int get_extra_currency_amount(cell extra_currencies) inline {
                 .store_slice(asset1)
                 .store_slice(asset2)
                 .store_uint(amm, 3)
+                .store_maybe_ref(amm_settings)
                 .store_ref(
                     begin_cell()
                         .store_slice(recipient)
                         .store_maybe_ref(notification_data)
                         .store_uint(is_active, 1)
-                        .store_maybe_ref(amm_settings)
                         .store_maybe_ref(extra_settings)
                         .end_cell()
                 )

@@ -144,7 +144,7 @@ export class JettonWallet implements Contract {
         await this.sendTransferWithPayload(provider, via, value, vault, amount, b.endCell());
     }
 
-    async sendCreatePoolJetton(provider: ContractProvider, via: Sender, value: bigint, vault: Address, amount: bigint, recipient: Address, params: PoolParams, amm_settings: Cell | null, notification_data: NotificationData | null) {
+    async sendCreatePoolJetton(provider: ContractProvider, via: Sender, value: bigint, vault: Address, amount: bigint, recipient: Address, params: PoolParams, notification_data: NotificationData | null) {
         await this.sendCreatePoolJettonFromParams(
             provider,
             via,
@@ -154,7 +154,7 @@ export class JettonWallet implements Contract {
             params,
             new PoolCreationParams(
                 new PublicPoolCreationParams(recipient, notification_data),
-                new PrivatePoolCreationParams(true, amm_settings, null)
+                new PrivatePoolCreationParams(true, null)
             )
         )
     }

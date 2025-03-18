@@ -7,7 +7,7 @@ import {
     contractAddress,
     ContractProvider, Dictionary,
     Sender,
-    SendMode, Slice
+    SendMode, Slice, TupleItemCell, TupleItemNull
 } from '@ton/core';
 import {AMM, Asset, AssetExtra, AssetJetton, AssetNative, PoolParams, PoolUpdateParams} from "./types";
 import {CodeCells} from "../tests/utils";
@@ -114,7 +114,6 @@ export class Factory implements Contract {
     async sendUpdatePool(provider: ContractProvider, via: Sender,
                          value: bigint,
                          pool_params: PoolParams,
-                         amm_settings: Cell | null,
                          protocol_fee: number | null,
                          lp_fee: number | null,
                          is_active: boolean | null
@@ -124,26 +123,21 @@ export class Factory implements Contract {
             .storeUint(0, 64);
         pool_params.write(b);
 
-        //.storeAddress(excess_receiver);
         const paramBuilder = beginCell();
         let flag = 0;
-        if (amm_settings != null) {
-            flag += 1;
-            paramBuilder.storeRef(amm_settings);
-        }
         if (protocol_fee != null || lp_fee != null) {
-            flag += 2;
-            paramBuilder.storeUint(protocol_fee as number, 16);
-            paramBuilder.storeUint(lp_fee as number, 16);
+            flag += 1;
+            paramBuilder.storeUint(protocol_fee!, 16);
+            paramBuilder.storeUint(lp_fee!, 16);
         }
         if (is_active != null) {
-            flag += 4;
+            flag += 2;
             paramBuilder.storeBit(is_active)
         }
 
         b.storeRef(
             beginCell()
-                .storeUint(flag, 3)
+                .storeUint(flag, 2)
                 .storeBuilder(paramBuilder)
                 .endCell()
         );
@@ -195,7 +189,7 @@ export class Factory implements Contract {
         return res.stack.readCell();
     }
 
-    async getPoolAddress(provider: ContractProvider, asset1: any, asset2: any, amm: AMM) {
+    async getPoolAddress(provider: ContractProvider, asset1: any, asset2: any, amm: AMM, ammSettings: Cell | null = null) {
         const b1 = beginCell()
         const b2 = beginCell()
         this.serializeAsset(b1, asset1)
@@ -203,13 +197,14 @@ export class Factory implements Contract {
         let res = await provider.get("get_pool_address", [
             {type: 'slice', cell: b1.endCell()},
             {type: 'slice', cell: b2.endCell()},
-            {type: 'int', value: BigInt(amm)}
+            {type: 'int', value: BigInt(amm)},
+            ammSettings === null ? {type: 'null'} : {type: 'cell', cell: ammSettings}
         ]);
         return res.stack.readAddress();
     }
 
-    async getPoolJettonBased(provider: ContractProvider, asset1: any, asset2: any, amm: AMM): Promise<PoolJettonBased> {
-        const address = await this.getPoolAddress(provider, asset1, asset2, amm);
+    async getPoolJettonBased(provider: ContractProvider, asset1: any, asset2: any, amm: AMM, ammSettings: Cell | null = null): Promise<PoolJettonBased> {
+        const address = await this.getPoolAddress(provider, asset1, asset2, amm, ammSettings);
         if (amm == AMM.ConstantProduct) {
             return PoolConstantProduct.createFromAddress(address);
         } else if (amm == AMM.CurveFiStable) {
@@ -219,7 +214,7 @@ export class Factory implements Contract {
         }
     }
 
-    async getPoolAddressHash(provider: ContractProvider, asset1: any, asset2: any, amm: AMM) {
+    async getPoolAddressHash(provider: ContractProvider, asset1: any, asset2: any, amm: AMM, ammSettings: Cell | null = null) {
         const b1 = beginCell()
         const b2 = beginCell()
         this.serializeAsset(b1, asset1)
@@ -227,14 +222,15 @@ export class Factory implements Contract {
         let res = await provider.get("get_pool_address", [
             {type: 'slice', cell: b1.endCell()},
             {type: 'slice', cell: b2.endCell()},
-            {type: 'int', value: BigInt(amm)}
+            {type: 'int', value: BigInt(amm)},
+            ammSettings === null ? {type: 'null'} : {type: 'cell', cell: ammSettings}
         ]);
         let stack = res.stack;
         stack.readAddress();
         return stack.readBigNumber();
     }
 
-    async getPoolCreatorAddress(provider: ContractProvider, owner: Address, asset1: any, asset2: any, amm: AMM) {
+    async getPoolCreatorAddress(provider: ContractProvider, owner: Address, asset1: any, asset2: any, amm: AMM, ammSettings: Cell | null = null) {
         const b1 = beginCell()
         const b2 = beginCell()
         this.serializeAsset(b1, asset1)
@@ -243,12 +239,13 @@ export class Factory implements Contract {
             {type: 'slice', cell: beginCell().storeAddress(owner).endCell()},
             {type: 'slice', cell: b1.endCell()},
             {type: 'slice', cell: b2.endCell()},
-            {type: 'int', value: BigInt(amm)}
+            {type: 'int', value: BigInt(amm)},
+            ammSettings === null ? {type: 'null'} : {type: 'cell', cell: ammSettings}
         ]);
         return res.stack.readAddress();
     }
 
-    async getLiquidityDepositoryAddress(provider: ContractProvider, owner: Address, asset1: any, asset2: any, amm: AMM) {
+    async getLiquidityDepositoryAddress(provider: ContractProvider, owner: Address, asset1: any, asset2: any, amm: AMM, ammSettings: Cell | null = null) {
         const b1 = beginCell()
         const b2 = beginCell()
         this.serializeAsset(b1, asset1)
@@ -257,7 +254,8 @@ export class Factory implements Contract {
             {type: 'slice', cell: beginCell().storeAddress(owner).endCell()},
             {type: 'slice', cell: b1.endCell()},
             {type: 'slice', cell: b2.endCell()},
-            {type: 'int', value: BigInt(amm)}
+            {type: 'int', value: BigInt(amm)},
+            ammSettings === null ? {type: 'null'} : {type: 'cell', cell: ammSettings}
         ]);
         return res.stack.readAddress();
     }

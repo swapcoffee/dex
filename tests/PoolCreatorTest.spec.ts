@@ -66,7 +66,6 @@ describe('Test', () => {
             toNano(10.0),
             admin.address,
             PoolParams.fromAddress(jetton1.master.address, jetton2.master.address, AMM.ConstantProduct),
-            null,
             null
         );
         expect(txs.transactions).toHaveTransaction(
@@ -90,7 +89,6 @@ describe('Test', () => {
             toNano(10.0),
             admin.address,
             PoolParams.fromAddress(jetton1.master.address, jetton2.master.address, AMM.ConstantProduct),
-            null,
             null
         );
         expect(txs.transactions).toHaveTransaction(
@@ -145,7 +143,6 @@ describe('Test', () => {
             toNano(10.0),
             user.address,
             PoolParams.fromAddress(jetton1.master.address, jetton2.master.address, AMM.ConstantProduct),
-            null,
             null
         );
         expect(txs.transactions).toHaveTransaction(
@@ -169,7 +166,6 @@ describe('Test', () => {
             toNano(10.0),
             user.address,
             PoolParams.fromAddress(jetton1.master.address, jetton2.master.address, AMM.ConstantProduct),
-            null,
             null
         );
         expect(txs.transactions).toHaveTransaction(
@@ -203,21 +199,19 @@ describe('Test', () => {
             jetton1.vault.address,
             toNano(10.0),
             admin.address,
-            PoolParams.fromAddress(jetton1.master.address, null, AMM.CurveFiStable),
-            ammSettings,
+            PoolParams.fromAddress(jetton1.master.address, null, AMM.CurveFiStable, ammSettings),
             null
         );
+        const poolCreatorAddress = await factory.getPoolCreatorAddress(admin.address, jetton1.master.address, null, AMM.CurveFiStable, ammSettings)
         expect(txs.transactions).toHaveTransaction(
             {
                 from: factory.address,
-                to: await factory.getPoolCreatorAddress(admin.address, jetton1.master.address, null, AMM.CurveFiStable),
+                to: poolCreatorAddress,
                 exitCode: 0,
                 success: true
             }
         );
-        let state = await blockchain.getContract(
-            await factory.getPoolCreatorAddress(admin.address, null, jetton1.master.address, AMM.CurveFiStable)
-        );
+        let state = await blockchain.getContract(poolCreatorAddress);
         expect(state.balance).not.toBe(0n);
         expect((state.accountState as AccountStateActive).type).toBe('active');
 
@@ -226,23 +220,20 @@ describe('Test', () => {
             toNano(11.0),
             toNano(10.0),
             admin.address,
-            PoolParams.fromAddress(null, jetton1.master.address, AMM.CurveFiStable),
-            ammSettings,
+            PoolParams.fromAddress(null, jetton1.master.address, AMM.CurveFiStable, ammSettings),
             null
         );
         expect(txs.transactions).toHaveTransaction(
             {
                 from: factory.address,
-                to: await factory.getPoolCreatorAddress(admin.address, jetton1.master.address, null, AMM.CurveFiStable),
+                to: poolCreatorAddress,
                 exitCode: 0,
                 success: true
             }
         );
 
         // check balance = 0 & uninitialized
-        state = await blockchain.getContract(
-            await factory.getPoolCreatorAddress(admin.address, jetton1.master.address, null, AMM.CurveFiStable)
-        );
+        state = await blockchain.getContract(poolCreatorAddress);
         expect(state.balance).toBe(0n);
         expect(state.accountState).toBe(undefined);
     });
@@ -269,7 +260,6 @@ describe('Test', () => {
             toNano(10.0),
             user.address,
             PoolParams.fromAddress(jetton1.master.address, null, AMM.ConstantProduct),
-            null,
             null
         );
         expect(txs.transactions).toHaveTransaction(
@@ -292,7 +282,6 @@ describe('Test', () => {
             toNano(10.0),
             user.address,
             PoolParams.fromAddress(jetton1.master.address, null, AMM.ConstantProduct),
-            null,
             null
         );
         expect(txs.transactions).toHaveTransaction(
@@ -334,7 +323,6 @@ describe('Test', () => {
             toNano(10.0),
             user.address,
             PoolParams.fromAddress(jetton1.master.address, null, AMM.ConstantProduct),
-            null,
             null
         );
         let state = await blockchain.getContract(
@@ -396,7 +384,6 @@ describe('Test', () => {
             toNano(10.0),
             user.address,
             PoolParams.fromAddress(jetton1.master.address, null, AMM.ConstantProduct),
-            null,
             null
         );
         let state = await blockchain.getContract(
@@ -432,20 +419,16 @@ describe('Test', () => {
             toNano(11.0),
             toNano(10.0),
             admin.address,
-            PoolParams.fromAddress(jetton1.master.address, null, AMM.CurveFiStable),
-            ammSettings,
+            PoolParams.fromAddress(jetton1.master.address, null, AMM.CurveFiStable, ammSettings),
             null
         );
 
-        let state = await blockchain.getContract(
-            await factory.getPoolCreatorAddress(admin.address, jetton1.master.address, null, AMM.CurveFiStable)
-        );
+        let poolAddress = await factory.getPoolCreatorAddress(admin.address, jetton1.master.address, null, AMM.CurveFiStable, ammSettings)
+        let state = await blockchain.getContract(poolAddress);
         expect(state.balance).not.toBe(0n);
         expect((state.accountState as AccountStateActive).type).toBe('active');
 
-        let poolCreator = blockchain.openContract(PoolCreator.createFromAddress(
-            await factory.getPoolCreatorAddress(admin.address, jetton1.master.address, null, AMM.CurveFiStable)
-        ));
+        let poolCreator = blockchain.openContract(PoolCreator.createFromAddress(poolAddress));
 
         let txs = await poolCreator.sendWithdrawFunds(admin.getSender(), toNano(1.0));
         expect(txs.transactions).toHaveTransaction({
@@ -462,9 +445,7 @@ describe('Test', () => {
             success: true
         });
 
-        state = await blockchain.getContract(
-            await factory.getPoolCreatorAddress(admin.address, jetton1.master.address, null, AMM.CurveFiStable)
-        );
+        state = await blockchain.getContract(poolAddress);
         expect(state.balance).toBe(0n);
         expect(state.accountState).toBe(undefined);
     });
@@ -480,8 +461,7 @@ describe('Test', () => {
             toNano(11.0),
             toNano(10.0),
             user.address,
-            PoolParams.fromAddress(jetton1.master.address, null, AMM.CurveFiStable),
-            ammSettings,
+            PoolParams.fromAddress(jetton1.master.address, null, AMM.CurveFiStable, ammSettings),
             null
         );
 
@@ -512,7 +492,6 @@ describe('Test', () => {
             toNano(10.0),
             user.address,
             PoolParams.fromAddress(jetton1.master.address, null, AMM.ConstantProduct),
-            null,
             null
         );
 
@@ -545,7 +524,6 @@ describe('Test', () => {
                 toNano(10),
                 sender.address,
                 PoolParams.fromAddress(null, jetton1.master.address, AMM.ConstantProduct),
-                null,
                 null
             )
             vault = nativeVault
@@ -560,7 +538,6 @@ describe('Test', () => {
                 toNano(10),
                 sender.address,
                 PoolParams.fromAddress(null, jetton1.master.address, AMM.ConstantProduct),
-                null,
                 null
             )
             vault = jetton1.vault
@@ -670,7 +647,7 @@ describe('Test', () => {
     )('try create jetton+native pool: %s, first: %s, by admin in favor of user, ok', async (type, order) => {
         let ammType;
         let ammSettings;
-        if(type === 'stable') {
+        if (type === 'stable') {
             ammType = AMM.CurveFiStable;
             ammSettings = beginCell()
                 .storeUint(100, 16)
@@ -683,18 +660,15 @@ describe('Test', () => {
             ammSettings = null;
         }
 
-        const depository = blockchain.openContract(
-            PoolCreator.createFromAddress(
-                await factory.getPoolCreatorAddress(user.address, null, jetton1.master.address, ammType)
-            )
-        )
+        const poolCreatorAddress = await factory.getPoolCreatorAddress(user.address, null, jetton1.master.address, ammType, ammSettings)
+        const depository = blockchain.openContract(PoolCreator.createFromAddress(poolCreatorAddress))
 
         let tx1;
         let tx2;
 
         let initiator1;
         let initiator2;
-        if(order === 'native') {
+        if (order === 'native') {
             initiator1 = nativeVault.address;
             initiator2 = jetton1.vault.address;
             tx1 = await nativeVault.sendCreatePoolNative(
@@ -702,8 +676,7 @@ describe('Test', () => {
                 toNano(11),
                 toNano(10),
                 user.address,
-                PoolParams.fromAddress(null, jetton1.master.address, ammType),
-                ammSettings,
+                PoolParams.fromAddress(null, jetton1.master.address, ammType, ammSettings),
                 null
             );
             tx2 = await blockchain.openContract(
@@ -714,8 +687,7 @@ describe('Test', () => {
                 jetton1.vault.address,
                 toNano(10),
                 user.address,
-                PoolParams.fromAddress(null, jetton1.master.address, ammType),
-                ammSettings,
+                PoolParams.fromAddress(null, jetton1.master.address, ammType, ammSettings),
                 null
             );
         } else {
@@ -729,8 +701,7 @@ describe('Test', () => {
                 jetton1.vault.address,
                 toNano(10),
                 user.address,
-                PoolParams.fromAddress(null, jetton1.master.address, ammType),
-                ammSettings,
+                PoolParams.fromAddress(null, jetton1.master.address, ammType, ammSettings),
                 null
             );
             tx2 = await nativeVault.sendCreatePoolNative(
@@ -738,14 +709,10 @@ describe('Test', () => {
                 toNano(11),
                 toNano(10),
                 user.address,
-                PoolParams.fromAddress(null, jetton1.master.address, ammType),
-                ammSettings,
+                PoolParams.fromAddress(null, jetton1.master.address, ammType, ammSettings),
                 null
             );
         }
-
-
-
         expect(tx1.transactions).toHaveTransaction(
             {
                 from: initiator1,
@@ -754,7 +721,6 @@ describe('Test', () => {
                 success: true
             }
         )
-
         expect(tx1.transactions).toHaveTransaction(
             {
                 from: factory.address,
@@ -763,7 +729,6 @@ describe('Test', () => {
                 success: true
             }
         )
-
         expect(tx2.transactions).toHaveTransaction(
             {
                 from: initiator2,
@@ -772,7 +737,6 @@ describe('Test', () => {
                 success: true
             }
         )
-
         expect(tx2.transactions).toHaveTransaction(
             {
                 from: factory.address,
@@ -781,7 +745,6 @@ describe('Test', () => {
                 success: true
             }
         )
-
         expect(tx2.transactions).toHaveTransaction(
             {
                 from: depository.address,
@@ -790,26 +753,22 @@ describe('Test', () => {
                 success: true
             }
         )
-
         expect(tx2.transactions).toHaveTransaction(
             {
                 from: factory.address,
-                to: await factory.getPoolAddress(null, jetton1.master.address, ammType),
+                to: await factory.getPoolAddress(null, jetton1.master.address, ammType, ammSettings),
                 exitCode: 0,
                 success: true
             }
         )
-
         let userPoolWallet = blockchain.openContract(
             JettonWallet.createFromAddress(
                 await blockchain.openContract(
-                    JettonMaster.createFromAddress(await factory.getPoolAddress(null, jetton1.master.address, ammType))
+                    JettonMaster.createFromAddress(await factory.getPoolAddress(null, jetton1.master.address, ammType, ammSettings))
                 ).getWalletAddress(user.address)
             )
         );
-
         expect(await userPoolWallet.getWalletBalance()).toBeGreaterThan(100n);
-
     })
 
     test.each(
@@ -837,7 +796,7 @@ describe('Test', () => {
 
         const depository = blockchain.openContract(
             PoolCreator.createFromAddress(
-                await factory.getPoolCreatorAddress(user.address, null, jetton1.master.address, ammType)
+                await factory.getPoolCreatorAddress(user.address, null, jetton1.master.address, ammType, ammSettings)
             )
         )
         if(order === 'native') {
@@ -846,8 +805,7 @@ describe('Test', () => {
                 toNano(11),
                 toNano(10),
                 user.address,
-                PoolParams.fromAddress(null, jetton1.master.address, ammType),
-                ammSettings,
+                PoolParams.fromAddress(null, jetton1.master.address, ammType, ammSettings),
                 null
             );
         } else {
@@ -859,8 +817,7 @@ describe('Test', () => {
                 jetton1.vault.address,
                 toNano(10),
                 user.address,
-                PoolParams.fromAddress(null, jetton1.master.address, ammType),
-                ammSettings,
+                PoolParams.fromAddress(null, jetton1.master.address, ammType, ammSettings),
                 null
             );
         }
@@ -898,19 +855,15 @@ describe('Test', () => {
             ammSettings = null;
         }
 
-        const depository = blockchain.openContract(
-            PoolCreator.createFromAddress(
-                await factory.getPoolCreatorAddress(user.address, null, jetton1.master.address, ammType)
-            )
-        )
-        if(order === 'native') {
+        const poolCreatorAddress = await factory.getPoolCreatorAddress(user.address, null, jetton1.master.address, ammType, ammSettings)
+        const depository = blockchain.openContract(PoolCreator.createFromAddress(poolCreatorAddress))
+        if (order === 'native') {
             await nativeVault.sendCreatePoolNative(
                 admin.getSender(),
                 toNano(11),
                 toNano(10),
                 user.address,
-                PoolParams.fromAddress(null, jetton1.master.address, ammType),
-                ammSettings,
+                PoolParams.fromAddress(null, jetton1.master.address, ammType, ammSettings),
                 null
             );
         } else {
@@ -922,8 +875,7 @@ describe('Test', () => {
                 jetton1.vault.address,
                 toNano(10),
                 user.address,
-                PoolParams.fromAddress(null, jetton1.master.address, ammType),
-                ammSettings,
+                PoolParams.fromAddress(null, jetton1.master.address, ammType, ammSettings),
                 null
             );
         }

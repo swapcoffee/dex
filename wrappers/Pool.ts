@@ -18,11 +18,11 @@ export abstract class Pool implements Contract {
             asset1: res.stack.readCell(),
             asset2: res.stack.readCell(),
             amm: res.stack.readBigNumber(),
+            ammSettings: res.stack.readCellOpt(),
             isActive: res.stack.readBigNumber(),
             reserve1: res.stack.readBigNumber(),
             reserve2: res.stack.readBigNumber(),
             totalSupply: res.stack.readBigNumber(),
-            ammSettings: res.stack.readCellOpt(),
             protocolFee: res.stack.readBigNumber(),
             lpFee: res.stack.readBigNumber()
         }

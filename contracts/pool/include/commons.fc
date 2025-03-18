@@ -150,25 +150,21 @@ int get_direction_from_proof(slice cs, slice previous_asset_hint) inline {
 () update_pool(int query_id, slice in_msg_body) impure inline {
     slice excesses_receiver = in_msg_body~load_msg_addr();
     slice params_cs = in_msg_body~load_ref().begin_parse();
-    int flags = params_cs~load_uint(3);
-    cell amm_settings = storage::amm_settings;
-    if (flags & 1) {
-        amm_settings = params_cs~load_ref();
-    }
+    int flags = params_cs~load_uint(2);
     int protocol_fee = storage::protocol_fee;
     int lp_fee = storage::lp_fee;
-    if (flags & 2) {
+    if (flags & 1) {
         protocol_fee = params_cs~load_uint(16);
         lp_fee = params_cs~load_uint(16);
         throw_unless(errors::invalid_fee, (protocol_fee <= fee::max_nominator) | (lp_fee <= fee::max_nominator));
     }
     int is_active = storage::is_active;
-    if (flags & 4) {
+    if (flags & 2) {
         is_active = params_cs~load_bool();
         throw_if(errors::already_active, is_active & storage::is_active);
         throw_unless(errors::not_active, is_active | storage::is_active);
     }
-    update_settings(amm_settings, protocol_fee, lp_fee, is_active);
+    update_settings(protocol_fee, lp_fee, is_active);
     ifnot (is_address_none(excesses_receiver)) {
         reserve_for_carry_inbound_without_value();
         send_builder(
@@ -227,18 +223,18 @@ int get_direction_from_proof(slice cs, slice previous_asset_hint) inline {
 
 {- GET METHODS -}
 
-(int, slice, slice, int, int, int, int, int, cell, int, int) get_pool_data() method_id {
+(int, slice, slice, int, cell, int, int, int, int, int, int) get_pool_data() method_id {
     load_data();
     return (
         pool_code_version,
         storage::asset1,
         storage::asset2,
         storage::amm,
+        storage::amm_settings,
         storage::is_active,
         storage::reserve1,
         storage::reserve2,
         storage::total_supply,
-        storage::amm_settings,
         storage::protocol_fee,
         storage::lp_fee
     );

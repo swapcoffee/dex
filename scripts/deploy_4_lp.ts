@@ -82,8 +82,7 @@ async function sendMessage(
                 vault,
                 asset1,
                 provider.sender().address!!,
-                new PoolParams(Asset.fromAny(token1), Asset.fromAny(token2), amm),
-                ammSettings,
+                new PoolParams(Asset.fromAny(token1), Asset.fromAny(token2), amm, ammSettings),
                 null,
             );
         } else {

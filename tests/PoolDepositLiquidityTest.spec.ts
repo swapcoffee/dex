@@ -30,8 +30,7 @@ describe('Test', () => {
         sender: SandboxContract<TreasuryContract>,
         vault: SandboxContract<VaultNative> | SandboxContract<VaultJetton> | SandboxContract<VaultExtra>,
         amount: bigint,
-        param: PoolParams,
-        ammSettings: Cell | null
+        param: PoolParams
     ) {
         const asset = await vault.getAssetParsed()
         if (asset instanceof AssetNative) {
@@ -41,7 +40,6 @@ describe('Test', () => {
                 amount,
                 sender.address,
                 param,
-                ammSettings,
                 null
             )
         } else if (asset instanceof AssetJetton) {
@@ -65,7 +63,6 @@ describe('Test', () => {
                 amount,
                 sender.address,
                 param,
-                ammSettings,
                 null
             )
         } else if (asset instanceof AssetExtra) {
@@ -74,7 +71,6 @@ describe('Test', () => {
                 toNano(1),
                 sender.address,
                 param,
-                ammSettings,
                 null
             )
         } else {
@@ -232,8 +228,7 @@ describe('Test', () => {
                 await resolveVault(t1).getAssetParsed(),
                 await resolveVault(t2).getAssetParsed(),
                 AMM.ConstantProduct
-            ),
-            null
+            )
         )
         printTransactions(txs.transactions);
         txs = await createPool(user,
@@ -243,8 +238,7 @@ describe('Test', () => {
                 await resolveVault(t1).getAssetParsed(),
                 await resolveVault(t2).getAssetParsed(),
                 AMM.ConstantProduct
-            ),
-            null
+            )
         )
         printTransactions(txs.transactions);
 
@@ -279,8 +273,7 @@ describe('Test', () => {
                 await resolveVault(t1).getAssetParsed(),
                 await resolveVault(t2).getAssetParsed(),
                 AMM.ConstantProduct
-            ),
-            null
+            )
         )
         printTransactions(txs.transactions);
         txs = await createPool(user,
@@ -290,8 +283,7 @@ describe('Test', () => {
                 await resolveVault(t1).getAssetParsed(),
                 await resolveVault(t2).getAssetParsed(),
                 AMM.ConstantProduct
-            ),
-            null
+            )
         )
         printTransactions(txs.transactions);
 
@@ -348,8 +340,7 @@ describe('Test', () => {
                 await resolveVault(t1).getAssetParsed(),
                 await resolveVault(t2).getAssetParsed(),
                 AMM.ConstantProduct
-            ),
-            null
+            )
         )
         await createPool(user,
             resolveVault(t2),
@@ -358,8 +349,7 @@ describe('Test', () => {
                 await resolveVault(t1).getAssetParsed(),
                 await resolveVault(t2).getAssetParsed(),
                 AMM.ConstantProduct
-            ),
-            null
+            )
         )
 
         let pool = blockchain.openContract(
@@ -383,8 +373,7 @@ describe('Test', () => {
                 await resolveVault(t1).getAssetParsed(),
                 await resolveVault(t2).getAssetParsed(),
                 AMM.ConstantProduct
-            ),
-            null
+            )
         )
         printTransactions(txs.transactions);
         txs = await createPool(user,
@@ -394,8 +383,7 @@ describe('Test', () => {
                 await resolveVault(t1).getAssetParsed(),
                 await resolveVault(t2).getAssetParsed(),
                 AMM.ConstantProduct
-            ),
-            null
+            )
         )
         printTransactions(txs.transactions);
 
@@ -455,8 +443,7 @@ describe('Test', () => {
                 await resolveVault(t1).getAssetParsed(),
                 await resolveVault(t2).getAssetParsed(),
                 AMM.ConstantProduct
-            ),
-            null
+            )
         )
         await createPool(user,
             resolveVault(t2),
@@ -465,8 +452,7 @@ describe('Test', () => {
                 await resolveVault(t1).getAssetParsed(),
                 await resolveVault(t2).getAssetParsed(),
                 AMM.ConstantProduct
-            ),
-            null
+            )
         )
 
         let pool = blockchain.openContract(
@@ -554,8 +540,7 @@ describe('Test', () => {
                 await resolveVault(t1).getAssetParsed(),
                 await resolveVault(t2).getAssetParsed(),
                 AMM.ConstantProduct
-            ),
-            null
+            )
         );
         printTransactions(txs.transactions);
         txs = await createPool(user,
@@ -565,8 +550,7 @@ describe('Test', () => {
                 await resolveVault(t1).getAssetParsed(),
                 await resolveVault(t2).getAssetParsed(),
                 AMM.ConstantProduct
-            ),
-            null
+            )
         )
         printTransactions(txs.transactions);
         let pool = blockchain.openContract(
@@ -676,8 +660,7 @@ describe('Test', () => {
                 await resolveVault(t1).getAssetParsed(),
                 await resolveVault(t2).getAssetParsed(),
                 AMM.ConstantProduct
-            ),
-            null
+            )
         )
         await createPool(user,
             resolveVault(t2),
@@ -686,8 +669,7 @@ describe('Test', () => {
                 await resolveVault(t1).getAssetParsed(),
                 await resolveVault(t2).getAssetParsed(),
                 AMM.ConstantProduct
-            ),
-            null
+            )
         )
         let pool = blockchain.openContract(
             await factory.getPoolJettonBased(
@@ -803,8 +785,7 @@ describe('Test', () => {
                 await resolveVault(t1).getAssetParsed(),
                 await resolveVault(t2).getAssetParsed(),
                 AMM.ConstantProduct
-            ),
-            null
+            )
         );
         printTransactions(txs.transactions);
         txs = await createPool(user,
@@ -814,8 +795,7 @@ describe('Test', () => {
                 await resolveVault(t1).getAssetParsed(),
                 await resolveVault(t2).getAssetParsed(),
                 AMM.ConstantProduct
-            ),
-            null
+            )
         )
         printTransactions(txs.transactions);
         let pool = blockchain.openContract(
@@ -943,8 +923,7 @@ describe('Test', () => {
                 await resolveVault(t1).getAssetParsed(),
                 await resolveVault(t2).getAssetParsed(),
                 AMM.ConstantProduct
-            ),
-            null
+            )
         );
         await createPool(user,
             resolveVault(t2),
@@ -953,8 +932,7 @@ describe('Test', () => {
                 await resolveVault(t1).getAssetParsed(),
                 await resolveVault(t2).getAssetParsed(),
                 AMM.ConstantProduct
-            ),
-            null
+            )
         )
         let pool = blockchain.openContract(
             await factory.getPoolJettonBased(

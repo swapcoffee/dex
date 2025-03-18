@@ -1,12 +1,12 @@
-import {Blockchain, SandboxContract, TreasuryContract} from '@ton/sandbox';
-import {Address, beginCell, toNano} from '@ton/core';
+import { Blockchain, SandboxContract, TreasuryContract } from '@ton/sandbox';
+import { Address, beginCell, Cell, toNano } from '@ton/core';
 import '@ton/test-utils';
-import {Factory} from "../wrappers/Factory";
-import {printTransactions} from "../wrappers/utils";
-import {VaultJetton} from "../wrappers/VaultJetton";
-import {CodeCells, compileCodes} from "./utils";
-import {JettonMaster, JettonWallet} from "../wrappers/Jetton";
-import {VaultNative} from "../wrappers/VaultNative";
+import { Factory } from '../wrappers/Factory';
+import { printTransactions } from '../wrappers/utils';
+import { VaultJetton } from '../wrappers/VaultJetton';
+import { CodeCells, compileCodes } from './utils';
+import { JettonMaster, JettonWallet } from '../wrappers/Jetton';
+import { VaultNative } from '../wrappers/VaultNative';
 import {
     AMM,
     AssetNative,
@@ -15,8 +15,8 @@ import {
     DepositLiquidityParams,
     DepositLiquidityParamsTrimmed, NotificationData, NotificationDataSingle,
     PoolParams, SwapParams, SwapStepParams
-} from "../wrappers/types";
-import {VaultExtra} from "../wrappers/VaultExtra";
+} from '../wrappers/types';
+import { VaultExtra } from '../wrappers/VaultExtra';
 import { deployJettonWithVault, deployNativeVault, JettonDataWithVault } from './helpers';
 
 /**
@@ -61,25 +61,35 @@ describe('Test', () => {
     let admin: SandboxContract<TreasuryContract>;
     let factory: SandboxContract<Factory>;
 
-    let jetton1: JettonDataWithVault
-    let jetton2: JettonDataWithVault
-    let jetton3: JettonDataWithVault
-    let jetton4: JettonDataWithVault
-    let nativeVault: SandboxContract<VaultNative>
+    let jetton1: JettonDataWithVault;
+    let jetton2: JettonDataWithVault;
+    let jetton3: JettonDataWithVault;
+    let jetton4: JettonDataWithVault;
+    let nativeVault: SandboxContract<VaultNative>;
+
+    const stableAmmSettings = beginCell().storeUint(2_000, 16).storeCoins(1).storeCoins(1).endCell();
+
+    function resolveAmmSettings(amm: AMM): Cell | null {
+        if (amm == AMM.ConstantProduct) {
+            return null;
+        } else {
+            return stableAmmSettings;
+        }
+    }
 
     function resolveVault(type: VaultTypes): SandboxContract<VaultNative> | SandboxContract<VaultJetton> | SandboxContract<VaultExtra> {
         if (type == VaultTypes.NATIVE_VAULT) {
-            return nativeVault
+            return nativeVault;
         } else if (type == VaultTypes.JETTON_VAULT_1) {
-            return jetton1.vault
+            return jetton1.vault;
         } else if (type == VaultTypes.JETTON_VAULT_2) {
-            return jetton2.vault
+            return jetton2.vault;
         } else if (type == VaultTypes.JETTON_VAULT_3) {
-            return jetton3.vault
+            return jetton3.vault;
         } else if (type == VaultTypes.JETTON_VAULT_4) {
-            return jetton4.vault
+            return jetton4.vault;
         } else {
-            throw Error("Unknown type")
+            throw Error('Unknown type');
         }
     }
 
@@ -89,14 +99,14 @@ describe('Test', () => {
         amount: bigint,
         param: DepositLiquidityParams
     ) {
-        const asset = await vault.getAssetParsed()
+        const asset = await vault.getAssetParsed();
         if (asset instanceof AssetNative) {
             return await (vault as SandboxContract<VaultNative>).sendDepositLiquidityNative(
                 sender.getSender(),
                 amount + toNano(1),
                 amount,
-                param,
-            )
+                param
+            );
         } else if (asset instanceof AssetJetton) {
             let masterContract = blockchain.openContract(
                 JettonMaster.createFromAddress(
@@ -105,27 +115,27 @@ describe('Test', () => {
                         beginCell().storeUint(asset.hash, 256).endCell().beginParse().loadBuffer(32)
                     )
                 )
-            )
+            );
             let jettonVault = blockchain.openContract(
                 JettonWallet.createFromAddress(
                     await masterContract.getWalletAddress(sender.address)
                 )
-            )
+            );
             return await jettonVault.sendDepositLiquidityJetton(
                 sender.getSender(),
                 toNano(1),
                 vault.address,
                 amount,
                 param
-            )
+            );
         } else if (asset instanceof AssetExtra) {
             return await (vault as SandboxContract<VaultExtra>).sendDepositLiquidityExtra(
                 sender.getSender(),
                 toNano(1),
-                param,
-            )
+                param
+            );
         } else {
-            throw new Error("unexpected asset type")
+            throw new Error('unexpected asset type');
         }
     }
 
@@ -137,8 +147,7 @@ describe('Test', () => {
         swapStepParam: SwapStepParams,
         params: SwapParams
     ) {
-
-        const asset = await vault.getAssetParsed()
+        const asset = await vault.getAssetParsed();
         if (asset instanceof AssetNative) {
             return await (vault as SandboxContract<VaultNative>).sendSwapNative(
                 sender.getSender(),
@@ -146,7 +155,7 @@ describe('Test', () => {
                 amount,
                 swapStepParam,
                 params
-            )
+            );
         } else if (asset instanceof AssetJetton) {
             let masterContract = blockchain.openContract(
                 JettonMaster.createFromAddress(
@@ -155,12 +164,12 @@ describe('Test', () => {
                         beginCell().storeUint(asset.hash, 256).endCell().beginParse().loadBuffer(32)
                     )
                 )
-            )
+            );
             let jettonVault = blockchain.openContract(
                 JettonWallet.createFromAddress(
                     await masterContract.getWalletAddress(sender.address)
                 )
-            )
+            );
             return await jettonVault.sendSwapJetton(
                 sender.getSender(),
                 toNano(1),
@@ -168,16 +177,16 @@ describe('Test', () => {
                 amount,
                 swapStepParam,
                 params
-            )
+            );
         } else if (asset instanceof AssetExtra) {
             return await (vault as SandboxContract<VaultExtra>).sendSwapExtra(
                 sender.getSender(),
                 toNano(1),
                 swapStepParam,
                 params
-            )
+            );
         } else {
-            throw new Error("unexpected asset type")
+            throw new Error('unexpected asset type');
         }
     }
 
@@ -189,71 +198,66 @@ describe('Test', () => {
         [VaultTypes.JETTON_VAULT_1, VaultTypes.JETTON_VAULT_2, AMM.ConstantProduct],
 
         [VaultTypes.JETTON_VAULT_3, VaultTypes.JETTON_VAULT_4, AMM.CurveFiStable],
-        [VaultTypes.JETTON_VAULT_3, VaultTypes.JETTON_VAULT_4, AMM.ConstantProduct],
+        [VaultTypes.JETTON_VAULT_3, VaultTypes.JETTON_VAULT_4, AMM.ConstantProduct]
     ];
 
-    let allPoolsAllDirections =
-        allPools.map(
-            it => {
-                return [
-                    it,
-                    [it[1], it[0], it[2]]
-                ]
-            }
-        ).flat()
+    let allPoolsAllDirections = allPools.map(
+        it => {
+            return [
+                it,
+                [it[1], it[0], it[2]]
+            ];
+        }
+    ).flat();
 
-    let twoSwapDifferentPool =
-        allPoolsAllDirections.map(
-            it => {
-                let from = it[0];
-                let to = it[1];
-                let amm = it[2];
-                return allPoolsAllDirections.filter(jt => {
-                    let from2 = jt[0];
-                    let to2 = jt[1];
-                    let amm2 = jt[2];
-                    if (from == from2 && to == to2 && amm == amm2) {
-                        return false;
-                    }
-                    if (to == from2 && from == to2 && amm == amm2) {
-                        return false;
-                    }
-                    return (to == from2);
+    let twoSwapDifferentPool = allPoolsAllDirections.map(
+        it => {
+            let from = it[0];
+            let to = it[1];
+            let amm = it[2];
+            return allPoolsAllDirections.filter(jt => {
+                let from2 = jt[0];
+                let to2 = jt[1];
+                let amm2 = jt[2];
+                if (from == from2 && to == to2 && amm == amm2) {
+                    return false;
+                }
+                if (to == from2 && from == to2 && amm == amm2) {
+                    return false;
+                }
+                return (to == from2);
 
-                }).map(jt => {
-                    return [from, to, amm, jt[0], jt[1], jt[2]];
-                });
-            }
-        )
-            .flat();
+            }).map(jt => {
+                return [from, to, amm, jt[0], jt[1], jt[2]];
+            });
+        }
+    ).flat();
 
-    let twoSwapCycle =
-        allPoolsAllDirections.map(
-            it => {
-                let from = it[0];
-                let to = it[1];
-                let amm = it[2];
-                return allPoolsAllDirections.filter(jt => {
-                    let from2 = jt[0];
-                    let to2 = jt[1];
-                    let amm2 = jt[2];
-                    if (from == from2 && to == to2 && amm == amm2) {
-                        return true;
-                    }
-                    return to == from2 && from == to2 && amm == amm2;
+    let twoSwapCycle = allPoolsAllDirections.map(
+        it => {
+            let from = it[0];
+            let to = it[1];
+            let amm = it[2];
+            return allPoolsAllDirections.filter(jt => {
+                let from2 = jt[0];
+                let to2 = jt[1];
+                let amm2 = jt[2];
+                if (from == from2 && to == to2 && amm == amm2) {
+                    return true;
+                }
+                return to == from2 && from == to2 && amm == amm2;
 
-                }).map(jt => {
-                    return [from, to, amm, jt[0], jt[1], jt[2]];
-                });
-            }
-        )
-            .flat();
+            }).map(jt => {
+                return [from, to, amm, jt[0], jt[1], jt[2]];
+            });
+        }
+    ).flat();
 
-    let twoSwapFromAToB = twoSwapCycle.concat(twoSwapDifferentPool)
+    let twoSwapFromAToB = twoSwapCycle.concat(twoSwapDifferentPool);
 
     beforeEach(async () => {
         blockchain = await Blockchain.create();
-        admin = await blockchain.treasury('admin', {balance: toNano(1000.0)});
+        admin = await blockchain.treasury('admin', { balance: toNano(1000.0) });
         console.log('admin address =', admin.address.toRawString());
         factory = blockchain.openContract(
             Factory.createFromData(admin.address, codeCells)
@@ -265,26 +269,26 @@ describe('Test', () => {
             factory,
             admin,
             'TST1'
-        )
+        );
         jetton2 = await deployJettonWithVault(
             blockchain,
             factory,
             admin,
             'TST2'
-        )
+        );
         jetton3 = await deployJettonWithVault(
             blockchain,
             factory,
             admin,
             'TST3'
-        )
+        );
         jetton4 = await deployJettonWithVault(
             blockchain,
             factory,
             admin,
             'TST4'
-        )
-        nativeVault = await deployNativeVault(blockchain, factory, admin)
+        );
+        nativeVault = await deployNativeVault(blockchain, factory, admin);
 
         // native -> jetton1 volatile
         {
@@ -298,10 +302,9 @@ describe('Test', () => {
                     AssetJetton.fromAddress(jetton1.master.address),
                     AMM.ConstantProduct
                 ),
-                null,
                 null
-            )
-            printTransactions(txs.transactions)
+            );
+            printTransactions(txs.transactions);
             txs = await nativeVault.sendCreatePoolNative(
                 admin.getSender(),
                 toNano(6),
@@ -312,10 +315,9 @@ describe('Test', () => {
                     AssetJetton.fromAddress(jetton1.master.address),
                     AMM.ConstantProduct
                 ),
-                null,
                 null
-            )
-            printTransactions(txs.transactions)
+            );
+            printTransactions(txs.transactions);
         }
 
         // native -> jetton1 stable
@@ -328,11 +330,11 @@ describe('Test', () => {
                 new PoolParams(
                     AssetNative.INSTANCE,
                     AssetJetton.fromAddress(jetton1.master.address),
-                    AMM.CurveFiStable
+                    AMM.CurveFiStable,
+                    stableAmmSettings
                 ),
-                beginCell().storeUint(2_000, 16).storeCoins(1).storeCoins(1).endCell(),
                 null
-            )
+            );
             await nativeVault.sendCreatePoolNative(
                 admin.getSender(),
                 toNano(6),
@@ -341,15 +343,11 @@ describe('Test', () => {
                 new PoolParams(
                     AssetNative.INSTANCE,
                     AssetJetton.fromAddress(jetton1.master.address),
-                    AMM.CurveFiStable
+                    AMM.CurveFiStable,
+                    stableAmmSettings
                 ),
-                beginCell()
-                    .storeUint(2_000, 16)
-                    .storeCoins(1)
-                    .storeCoins(1)
-                    .endCell(),
                 null
-            )
+            );
         }
 
         // native -> jetton2 stable
@@ -362,11 +360,11 @@ describe('Test', () => {
                 new PoolParams(
                     AssetNative.INSTANCE,
                     AssetJetton.fromAddress(jetton2.master.address),
-                    AMM.CurveFiStable
+                    AMM.CurveFiStable,
+                    stableAmmSettings
                 ),
-                beginCell().storeUint(2_000, 16).storeCoins(1).storeCoins(1).endCell(),
                 null
-            )
+            );
             await nativeVault.sendCreatePoolNative(
                 admin.getSender(),
                 toNano(10),
@@ -375,15 +373,11 @@ describe('Test', () => {
                 new PoolParams(
                     AssetNative.INSTANCE,
                     AssetJetton.fromAddress(jetton2.master.address),
-                    AMM.CurveFiStable
+                    AMM.CurveFiStable,
+                    stableAmmSettings
                 ),
-                beginCell()
-                    .storeUint(2_000, 16)
-                    .storeCoins(1)
-                    .storeCoins(1)
-                    .endCell(),
                 null
-            )
+            );
         }
 
         // jetton1 -> jetton2 stable
@@ -396,11 +390,11 @@ describe('Test', () => {
                 new PoolParams(
                     AssetJetton.fromAddress(jetton1.master.address),
                     AssetJetton.fromAddress(jetton2.master.address),
-                    AMM.CurveFiStable
+                    AMM.CurveFiStable,
+                    stableAmmSettings
                 ),
-                beginCell().storeUint(2_000, 16).storeCoins(1).storeCoins(1).endCell(),
                 null
-            )
+            );
             await jetton2.wallet.sendCreatePoolJetton(admin.getSender(),
                 toNano(1),
                 jetton2.vault.address,
@@ -409,11 +403,11 @@ describe('Test', () => {
                 new PoolParams(
                     AssetJetton.fromAddress(jetton1.master.address),
                     AssetJetton.fromAddress(jetton2.master.address),
-                    AMM.CurveFiStable
+                    AMM.CurveFiStable,
+                    stableAmmSettings
                 ),
-                beginCell().storeUint(2_000, 16).storeCoins(1).storeCoins(1).endCell(),
                 null
-            )
+            );
         }
 
         // jetton1 -> jetton2 volatile
@@ -428,9 +422,8 @@ describe('Test', () => {
                     AssetJetton.fromAddress(jetton2.master.address),
                     AMM.ConstantProduct
                 ),
-                null,
                 null
-            )
+            );
             await jetton2.wallet.sendCreatePoolJetton(admin.getSender(),
                 toNano(1),
                 jetton2.vault.address,
@@ -441,9 +434,8 @@ describe('Test', () => {
                     AssetJetton.fromAddress(jetton2.master.address),
                     AMM.ConstantProduct
                 ),
-                null,
                 null
-            )
+            );
         }
 
         // jetton3 -> jetton4 stable
@@ -456,11 +448,11 @@ describe('Test', () => {
                 new PoolParams(
                     AssetJetton.fromAddress(jetton3.master.address),
                     AssetJetton.fromAddress(jetton4.master.address),
-                    AMM.CurveFiStable
+                    AMM.CurveFiStable,
+                    stableAmmSettings
                 ),
-                beginCell().storeUint(2_000, 16).storeCoins(1).storeCoins(1).endCell(),
                 null
-            )
+            );
             await jetton4.wallet.sendCreatePoolJetton(admin.getSender(),
                 toNano(1),
                 jetton4.vault.address,
@@ -469,11 +461,11 @@ describe('Test', () => {
                 new PoolParams(
                     AssetJetton.fromAddress(jetton3.master.address),
                     AssetJetton.fromAddress(jetton4.master.address),
-                    AMM.CurveFiStable
+                    AMM.CurveFiStable,
+                    stableAmmSettings
                 ),
-                beginCell().storeUint(2_000, 16).storeCoins(1).storeCoins(1).endCell(),
                 null
-            )
+            );
         }
 
         // jetton3 -> jetton4 volatile
@@ -488,9 +480,8 @@ describe('Test', () => {
                     AssetJetton.fromAddress(jetton4.master.address),
                     AMM.ConstantProduct
                 ),
-                null,
                 null
-            )
+            );
             await jetton4.wallet.sendCreatePoolJetton(admin.getSender(),
                 toNano(1),
                 jetton4.vault.address,
@@ -501,9 +492,8 @@ describe('Test', () => {
                     AssetJetton.fromAddress(jetton4.master.address),
                     AMM.ConstantProduct
                 ),
-                null,
                 null
-            )
+            );
         }
 
         console.log('factory address:', factory.address.toRawString(), '\n',
@@ -516,7 +506,7 @@ describe('Test', () => {
             'vaultJetton1:', jetton1.vault.address.toRawString(), '\n',
             'vaultJetton2:', jetton2.vault.address.toRawString(), '\n',
             'vaultJetton3:', jetton3.vault.address.toRawString(), '\n',
-            'vaultJetton4:', jetton4.vault.address.toRawString(), '\n',
+            'vaultJetton4:', jetton4.vault.address.toRawString(), '\n'
         );
 
     });
@@ -530,11 +520,12 @@ describe('Test', () => {
             await factory.getPoolJettonBased(
                 await vaultA.getAsset(),
                 await vaultB.getAsset(),
-                amm
+                amm,
+                resolveAmmSettings(amm)
             )
-        )
+        );
 
-        let txs = await pool.sendProvideWalletAddress(admin.getSender(), toNano(1), admin.address)
+        let txs = await pool.sendProvideWalletAddress(admin.getSender(), toNano(1), admin.address);
         printTransactions(txs.transactions);
         expect(txs.transactions).toHaveTransaction(
             {
@@ -543,7 +534,7 @@ describe('Test', () => {
                 exitCode: 0,
                 success: true
             }
-        )
+        );
 
         let poolAsJettonMaster = blockchain.openContract(JettonMaster.createFromAddress(pool.address));
         expect(txs.transactions).toHaveTransaction(
@@ -563,7 +554,7 @@ describe('Test', () => {
                     )
                     .endCell()
             }
-        )
+        );
     });
 
 
@@ -576,9 +567,10 @@ describe('Test', () => {
             await factory.getPoolJettonBased(
                 await vaultA.getAsset(),
                 await vaultB.getAsset(),
-                amm
+                amm,
+                resolveAmmSettings(amm)
             )
-        )
+        );
         let beforePoolData = await pool.getJettonData();
         expect(beforePoolData.totalSupply).toBeGreaterThan(0n);
 
@@ -603,10 +595,11 @@ describe('Test', () => {
             new PoolParams(
                 await vaultA.getAssetParsed(),
                 await vaultB.getAssetParsed(),
-                amm
+                amm,
+                resolveAmmSettings(amm)
             )
-        ))
-        printTransactions(f.transactions)
+        ));
+        printTransactions(f.transactions);
 
         let s = await depositLiquidity(admin, vaultB, toNano(1), new DepositLiquidityParams(
             new DepositLiquidityParamsTrimmed(
@@ -617,7 +610,7 @@ describe('Test', () => {
                 new NotificationData(
                     new NotificationDataSingle(
                         admin.address,
-                        toNano("0.01"),
+                        toNano('0.01'),
                         beginCell().endCell()
                     ),
                     null
@@ -626,10 +619,11 @@ describe('Test', () => {
             new PoolParams(
                 await vaultA.getAssetParsed(),
                 await vaultB.getAssetParsed(),
-                amm
+                amm,
+                resolveAmmSettings(amm)
             )
-        ))
-        printTransactions(s.transactions)
+        ));
+        printTransactions(s.transactions);
 
         let afterPoolData = await pool.getJettonData();
         expect(afterPoolData.totalSupply).toBeGreaterThan(beforePoolData.totalSupply);
@@ -653,11 +647,11 @@ describe('Test', () => {
                     .storeCoins(expectedLp.lpAmount)
                     .storeAddress(pool.address)
                     .storeAddress(admin.address)
-                    .storeCoins(toNano("0.01"))
+                    .storeCoins(toNano('0.01'))
                     .storeMaybeRef(beginCell().endCell())
                     .endCell()
             }
-        )
+        );
 
     });
 
@@ -670,15 +664,16 @@ describe('Test', () => {
             await factory.getPoolJettonBased(
                 await vaultA.getAsset(),
                 await vaultB.getAsset(),
-                amm
+                amm,
+                resolveAmmSettings(amm)
             )
-        )
+        );
 
         let beforePoolData = await pool.getJettonData();
         expect(beforePoolData.totalSupply).toBeGreaterThan(0n);
 
         let adminPoolLpWallet = blockchain.openContract(
-            JettonWallet.createFromAddress(await pool.getWalletAddress(admin.address)))
+            JettonWallet.createFromAddress(await pool.getWalletAddress(admin.address)));
         let txs = await adminPoolLpWallet.sendBurnTokens(admin.getSender(), toNano(1), toNano(0.5));
         expect(txs.transactions).toHaveTransaction(
             {
@@ -687,7 +682,7 @@ describe('Test', () => {
                 success: true,
                 exitCode: 0
             }
-        )
+        );
         expect(txs.transactions).toHaveTransaction(
             {
                 from: pool.address,
@@ -695,7 +690,7 @@ describe('Test', () => {
                 success: true,
                 exitCode: 0
             }
-        )
+        );
 
         let afterPoolData = await pool.getJettonData();
         expect(afterPoolData.totalSupply).toBeLessThan(beforePoolData.totalSupply);
@@ -710,20 +705,20 @@ describe('Test', () => {
         const amm = c as AMM;
 
         let pool = blockchain.openContract(
-            await factory.getPoolJettonBased(assetA, assetB, amm)
-        )
+            await factory.getPoolJettonBased(assetA, assetB, amm, resolveAmmSettings(amm))
+        );
 
         let swapInfo = await pool.getEstimateSwapAmount(
             await vaultA.getAsset(),
             toNano(1)
-        )
+        );
 
         let before = await pool.getPoolData();
         let txs = await doSwap(admin,
             vaultA,
             toNano(1),
             new SwapStepParams(
-                await factory.getPoolAddressHash(assetA, assetB, amm),
+                await factory.getPoolAddressHash(assetA, assetB, amm, resolveAmmSettings(amm)),
                 0n,
                 null
             ),
@@ -756,10 +751,11 @@ describe('Test', () => {
                         .storeSlice(after.asset1.asSlice())
                         .storeSlice(after.asset2.asSlice())
                         .storeUint(after.amm, 3)
+                        .storeMaybeRef(resolveAmmSettings(amm))
                         .endCell())
                     .endCell()
             }
-        )
+        );
     });
 
     test.each(allPoolsAllDirections)
@@ -771,15 +767,15 @@ describe('Test', () => {
         const amm = c as AMM;
 
         let pool = blockchain.openContract(
-            await factory.getPoolJettonBased(assetA, assetB, amm)
-        )
+            await factory.getPoolJettonBased(assetA, assetB, amm, resolveAmmSettings(amm))
+        );
         let lpWithdrawBefore = await pool.getEstimateLiquidityWithdrawAmount(10_000n);
 
         await doSwap(admin,
             vaultA,
             toNano(1),
             new SwapStepParams(
-                await factory.getPoolAddressHash(assetA, assetB, amm),
+                await factory.getPoolAddressHash(assetA, assetB, amm, resolveAmmSettings(amm)),
                 0n,
                 null
             ),
@@ -794,7 +790,7 @@ describe('Test', () => {
 
         let poolData = await pool.getPoolData();
 
-        let vaultAsset1 = await factory.getVaultAddress(poolData.asset1.asSlice())
+        let vaultAsset1 = await factory.getVaultAddress(poolData.asset1.asSlice());
         if (vaultA.address.toRawString() == vaultAsset1.toRawString()) {
             expect(lpWithdrawBefore.asset1).toBeLessThan(lpWithdrawAfter.asset1);
             expect(lpWithdrawBefore.asset2).toBeGreaterThan(lpWithdrawAfter.asset2);
@@ -804,7 +800,7 @@ describe('Test', () => {
         }
 
         let adminPoolLpWallet = blockchain.openContract(
-            JettonWallet.createFromAddress(await pool.getWalletAddress(admin.address)))
+            JettonWallet.createFromAddress(await pool.getWalletAddress(admin.address)));
         let txs = await adminPoolLpWallet.sendBurnTokens(admin.getSender(), toNano(1), 10_000n);
 
         let bodyAsset1 = beginCell()
@@ -819,8 +815,9 @@ describe('Test', () => {
                 .storeSlice(poolData.asset1.asSlice())
                 .storeSlice(poolData.asset2.asSlice())
                 .storeUint(poolData.amm, 3)
+                .storeMaybeRef(resolveAmmSettings(amm))
                 .endCell())
-            .endCell()
+            .endCell();
         let bodyAsset2 = beginCell()
             .storeUint(0xc0ffee21, 32)
             .storeUint(0, 64)
@@ -833,8 +830,9 @@ describe('Test', () => {
                 .storeSlice(poolData.asset1.asSlice())
                 .storeSlice(poolData.asset2.asSlice())
                 .storeUint(poolData.amm, 3)
+                .storeMaybeRef(resolveAmmSettings(amm))
                 .endCell())
-            .endCell()
+            .endCell();
 
         if (vaultA.address.toRawString() != vaultAsset1.toRawString()) {
             let tmp = bodyAsset1;
@@ -849,7 +847,7 @@ describe('Test', () => {
                 success: true,
                 body: bodyAsset1
             }
-        )
+        );
         expect(txs.transactions).toHaveTransaction(
             {
                 from: pool.address,
@@ -858,7 +856,7 @@ describe('Test', () => {
                 success: true,
                 body: bodyAsset2
             }
-        )
+        );
     });
 
     test.each(allPoolsAllDirections)
@@ -870,15 +868,15 @@ describe('Test', () => {
         const amm = c as AMM;
 
         let pool = blockchain.openContract(
-            await factory.getPoolJettonBased(assetA, assetB, amm)
-        )
+            await factory.getPoolJettonBased(assetA, assetB, amm, resolveAmmSettings(amm))
+        );
 
         let before = await pool.getPoolData();
         let txs = await doSwap(admin,
             vaultA,
             toNano(1),
             new SwapStepParams(
-                await factory.getPoolAddressHash(assetA, assetB, amm),
+                await factory.getPoolAddressHash(assetA, assetB, amm, resolveAmmSettings(amm)),
                 toNano(1_000n),
                 null
             ),
@@ -889,7 +887,7 @@ describe('Test', () => {
                 null
             )
         );
-        printTransactions(txs.transactions)
+        printTransactions(txs.transactions);
         let after = await pool.getPoolData();
         expect(before.reserve2).toBe(after.reserve2);
         expect(before.reserve1).toBe(after.reserve1);
@@ -900,7 +898,7 @@ describe('Test', () => {
                 success: true,
                 exitCode: 0
             }
-        )
+        );
     });
 
     test.each(twoSwapDifferentPool)
@@ -921,16 +919,18 @@ describe('Test', () => {
             await factory.getPoolJettonBased(
                 await vault1A.getAsset(),
                 await vault1B.getAsset(),
-                amm1
+                amm1,
+                resolveAmmSettings(amm1)
             )
-        )
+        );
         let pool2 = blockchain.openContract(
             await factory.getPoolJettonBased(
                 await vault2A.getAsset(),
                 await vault2B.getAsset(),
-                amm2
+                amm2,
+                resolveAmmSettings(amm2)
             )
-        )
+        );
 
         let before1 = await pool1.getPoolData();
         let before2 = await pool2.getPoolData();
@@ -939,10 +939,10 @@ describe('Test', () => {
             vault1A,
             toNano(1),
             new SwapStepParams(
-                await factory.getPoolAddressHash(await vault1A.getAsset(), await vault1B.getAsset(), amm1),
+                await factory.getPoolAddressHash(await vault1A.getAsset(), await vault1B.getAsset(), amm1, resolveAmmSettings(amm1)),
                 0n,
                 new SwapStepParams(
-                    await factory.getPoolAddressHash(await vault2A.getAsset(), await vault2B.getAsset(), amm2),
+                    await factory.getPoolAddressHash(await vault2A.getAsset(), await vault2B.getAsset(), amm2, resolveAmmSettings(amm2)),
                     0n,
                     null
                 )
@@ -971,7 +971,7 @@ describe('Test', () => {
                 success: true,
                 exitCode: 0
             }
-        )
+        );
         expect(txs.transactions).toHaveTransaction(
             {
                 from: pool1.address,
@@ -979,7 +979,7 @@ describe('Test', () => {
                 success: true,
                 exitCode: 0
             }
-        )
+        );
         expect(txs.transactions).toHaveTransaction(
             {
                 from: pool2.address,
@@ -987,9 +987,9 @@ describe('Test', () => {
                 success: true,
                 exitCode: 0
             }
-        )
+        );
 
-        expect(pool1.address.toRawString()).not.toBe(pool2.address.toRawString())
+        expect(pool1.address.toRawString()).not.toBe(pool2.address.toRawString());
 
     });
 
@@ -1011,16 +1011,18 @@ describe('Test', () => {
             await factory.getPoolJettonBased(
                 await vault1A.getAsset(),
                 await vault1B.getAsset(),
-                amm1
+                amm1,
+                resolveAmmSettings(amm1)
             )
-        )
+        );
         let pool2 = blockchain.openContract(
             await factory.getPoolJettonBased(
                 await vault2A.getAsset(),
                 await vault2B.getAsset(),
-                amm2
+                amm2,
+                resolveAmmSettings(amm2)
             )
-        )
+        );
 
         let before1 = await pool1.getPoolData();
 
@@ -1028,10 +1030,10 @@ describe('Test', () => {
             vault1A,
             toNano(1),
             new SwapStepParams(
-                await factory.getPoolAddressHash(await vault1A.getAsset(), await vault1B.getAsset(), amm1),
+                await factory.getPoolAddressHash(await vault1A.getAsset(), await vault1B.getAsset(), amm1, resolveAmmSettings(amm1)),
                 0n,
                 new SwapStepParams(
-                    await factory.getPoolAddressHash(await vault2A.getAsset(), await vault2B.getAsset(), amm2),
+                    await factory.getPoolAddressHash(await vault2A.getAsset(), await vault2B.getAsset(), amm2, resolveAmmSettings(amm2)),
                     0n,
                     null
                 )
@@ -1056,7 +1058,7 @@ describe('Test', () => {
                 success: true,
                 exitCode: 0
             }
-        )
+        );
         expect(txs.transactions).toHaveTransaction(
             {
                 from: pool1.address,
@@ -1064,7 +1066,7 @@ describe('Test', () => {
                 success: true,
                 exitCode: 0
             }
-        )
+        );
         expect(txs.transactions).toHaveTransaction(
             {
                 from: pool2.address,
@@ -1072,9 +1074,9 @@ describe('Test', () => {
                 success: true,
                 exitCode: 0
             }
-        )
+        );
 
-        expect(pool1.address.toRawString()).toBe(pool2.address.toRawString())
+        expect(pool1.address.toRawString()).toBe(pool2.address.toRawString());
 
     });
 
@@ -1096,16 +1098,18 @@ describe('Test', () => {
             await factory.getPoolJettonBased(
                 await vault1A.getAsset(),
                 await vault1B.getAsset(),
-                amm1
+                amm1,
+                resolveAmmSettings(amm1)
             )
-        )
+        );
         let pool2 = blockchain.openContract(
             await factory.getPoolJettonBased(
                 await vault2A.getAsset(),
                 await vault2B.getAsset(),
-                amm2
+                amm2,
+                resolveAmmSettings(amm2)
             )
-        )
+        );
 
         let before1 = await pool1.getPoolData();
         let before2 = await pool2.getPoolData();
@@ -1114,10 +1118,10 @@ describe('Test', () => {
             vault1A,
             toNano(1),
             new SwapStepParams(
-                await factory.getPoolAddressHash(await vault1A.getAsset(), await vault1B.getAsset(), amm1),
+                await factory.getPoolAddressHash(await vault1A.getAsset(), await vault1B.getAsset(), amm1, resolveAmmSettings(amm1)),
                 0n,
                 new SwapStepParams(
-                    await factory.getPoolAddressHash(await vault2A.getAsset(), await vault2B.getAsset(), amm2),
+                    await factory.getPoolAddressHash(await vault2A.getAsset(), await vault2B.getAsset(), amm2, resolveAmmSettings(amm2)),
                     toNano(1000),
                     null
                 )
@@ -1148,7 +1152,7 @@ describe('Test', () => {
                 success: true,
                 exitCode: 0
             }
-        )
+        );
         expect(txs.transactions).toHaveTransaction(
             {
                 from: pool1.address,
@@ -1156,7 +1160,7 @@ describe('Test', () => {
                 success: true,
                 exitCode: 269
             }
-        )
+        );
         expect(txs.transactions).toHaveTransaction(
             {
                 from: pool2.address,
@@ -1164,7 +1168,7 @@ describe('Test', () => {
                 success: true,
                 exitCode: 0
             }
-        )
+        );
     });
 
     test.each(allPoolsAllDirections)
@@ -1178,9 +1182,10 @@ describe('Test', () => {
             await factory.getPoolJettonBased(
                 await vault1A.getAsset(),
                 await vault1B.getAsset(),
-                amm1
+                amm1,
+                resolveAmmSettings(amm1)
             )
-        )
+        );
         let before1 = await pool1.getPoolData();
 
         let someNonPoolAddress = BigInt('0x' + factory.address.hash.toString('hex'));
@@ -1189,7 +1194,7 @@ describe('Test', () => {
             vault1A,
             toNano(1),
             new SwapStepParams(
-                await factory.getPoolAddressHash(await vault1A.getAsset(), await vault1B.getAsset(), amm1),
+                await factory.getPoolAddressHash(await vault1A.getAsset(), await vault1B.getAsset(), amm1, resolveAmmSettings(amm1)),
                 0n,
                 new SwapStepParams(
                     someNonPoolAddress,
@@ -1217,19 +1222,19 @@ describe('Test', () => {
                 success: true,
                 exitCode: 0
             }
-        )
+        );
         // address Pool<A, A> can't be constructed
         expect(txs.transactions).not.toHaveTransaction(
             {
                 to: vault1B.address,
                 op: 0xc0ffee21
             }
-        )
+        );
         expect(txs.transactions).not.toHaveTransaction(
             {
                 to: vault1A.address,
                 op: 0xc0ffee21
             }
-        )
+        );
     });
 });

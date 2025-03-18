@@ -10,6 +10,7 @@ global slice storage::owner_address;
 global slice storage::asset1;
 global slice storage::asset2;
 global int storage::amm;
+global cell storage::amm_settings;
 global int storage::amount1;
 global int storage::amount2;
 
@@ -17,7 +18,7 @@ global int storage::amount2;
     slice data_cs = get_data().begin_parse();
     storage::init_code_cell = data_cs~load_ref();
     storage::init_data_cell = data_cs~load_ref();
-    (storage::factory_address, storage::owner_address, storage::asset1, storage::asset2, storage::amm) = parse_owned_double_asset_init_data(storage::init_data_cell);
+    (storage::factory_address, storage::owner_address, storage::asset1, storage::asset2, storage::amm, storage::amm_settings) = parse_owned_double_asset_init_data(storage::init_data_cell);
     storage::amount1 = data_cs~load_coins();
     storage::amount2 = data_cs~load_coins();
 }
@@ -77,8 +78,6 @@ global int storage::amount2;
     if (opcode == opcodes::create_pool_creator_internal) {
         throw_unless(errors::not_a_factory, equal_slice_bits(storage::factory_address, sender_address));
         slice asset = in_msg_body~load_asset();
-        int amm = in_msg_body~load_uint(3);
-        throw_unless(errors::invalid_request, amm == storage::amm);
         int amount = in_msg_body~load_coins();
         cell creation_params = in_msg_body~load_ref();
         slice creation_params_cs = creation_params.begin_parse();
