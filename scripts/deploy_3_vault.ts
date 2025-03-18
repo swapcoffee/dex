@@ -1,20 +1,8 @@
-import {Address, Cell, toNano} from '@ton/core';
-import {compile, NetworkProvider} from '@ton/blueprint';
-import {Blockchain, SandboxContract, TreasuryContract} from "@ton/sandbox";
-import {JettonMaster, JettonWallet} from "../wrappers/Jetton";
-import {getTransactionAccount} from "../wrappers/utils";
-import {waitSeqNoChange} from "./utils";
-import {compileCodes, lpWalletCode} from "../tests/utils";
+import {Address, toNano} from '@ton/core';
+import {NetworkProvider} from '@ton/blueprint';
+import {JettonMaster} from "../wrappers/Jetton";
+import {compileCodes} from "../tests/utils";
 import {Factory} from "../wrappers/Factory";
-
-let initCode: Cell;
-let vaultNativeCode: Cell;
-let vaultJettonCode: Cell;
-let vaultExtraCode: Cell;
-let poolCode: Cell;
-let liquidityDepositoryCode: Cell;
-let poolCreatorCode: Cell;
-let factoryCode: Cell;
 
 export const NATIVE_ADDRESS = Address.parse("EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c");
 

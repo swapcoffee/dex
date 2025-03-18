@@ -1,0 +1,40 @@
+#include "stdlib.fc";
+
+const int min_tons_for_storage = 10000000; ;; 0.01 TON
+;; Note that 2 * gas_consumption is expected to be able to cover fees on both wallets (sender and receiver)
+;; and also constant fees on inter-wallet interaction, in particular fwd fee on state_init transfer
+;; that means that you need to reconsider this fee when:
+;; a) jetton logic become more gas-heavy
+;; b) jetton-wallet code (sent with inter-wallet message) become larger or smaller
+;; c) global fee changes / different workchain
+const int gas_consumption = 15000000; ;; 0.015 TON
+
+cell pack_jetton_wallet_data(int balance, slice owner_address, slice jetton_master_address, cell jetton_wallet_code) inline {
+    return  begin_cell()
+        .store_coins(balance)
+        .store_slice(owner_address)
+        .store_slice(jetton_master_address)
+        .store_ref(jetton_wallet_code)
+        .end_cell();
+}
+
+cell calculate_jetton_wallet_state_init(slice owner_address, slice jetton_master_address, cell jetton_wallet_code) inline {
+    return begin_cell()
+        .store_uint(0, 2)
+        .store_dict(jetton_wallet_code)
+        .store_dict(pack_jetton_wallet_data(0, owner_address, jetton_master_address, jetton_wallet_code))
+        .store_uint(0, 1)
+        .end_cell();
+}
+
+slice calculate_jetton_wallet_address(cell state_init) inline {
+    return begin_cell().store_uint(4, 3)
+        .store_int(BASECHAIN, 8)
+        .store_uint(cell_hash(state_init), 256)
+        .end_cell()
+        .begin_parse();
+}
+
+slice calculate_user_jetton_wallet_address(slice owner_address, slice jetton_master_address, cell jetton_wallet_code) inline {
+    return calculate_jetton_wallet_address(calculate_jetton_wallet_state_init(owner_address, jetton_master_address, jetton_wallet_code));
+}
