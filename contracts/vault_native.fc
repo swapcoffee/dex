@@ -138,6 +138,7 @@ global slice storage::factory_address;
                         .store_maybe_ref(amm_settings)
                         .end_cell() : pool_params
                 )
+                .store_slice(sender_address)
                 .store_ref(storage::init_data_cell),
             SEND_MODE_CARRY_ALL_BALANCE
         );
