@@ -96,17 +96,26 @@ int asset_extra_to_id(slice asset) inline {
     return (factory_address, asset);
 }
 
-(slice, slice, slice, int) parse_pool_init_data(cell init_data_cell) inline {
+(slice, slice, slice, int, cell) parse_pool_init_data(cell init_data_cell) inline {
     slice cs = init_data_cell.begin_parse();
     slice factory_address = cs~load_msg_addr();
     cs~skip_bits(2);
     slice asset1 = cs~load_asset();
     slice asset2 = cs~load_asset();
     int amm = cs~load_uint(3);
-    return (factory_address, asset1, asset2, amm);
+    cell amm_settings = cs~load_maybe_ref();
+    return (factory_address, asset1, asset2, amm, amm_settings);
 }
 
-cell gen_owned_double_asset_init_data(slice factory_address, int contract_type, slice owner, slice asset1, slice asset2, int amm) inline {
+cell gen_owned_double_asset_init_data(
+    slice factory_address,
+    int contract_type,
+    slice owner,
+    slice asset1,
+    slice asset2,
+    int amm,
+    cell amm_settings
+) inline {
     (asset1, asset2, _) = sort_assets(asset1, asset2);
     return begin_cell()
         .store_slice(factory_address)
@@ -117,12 +126,13 @@ cell gen_owned_double_asset_init_data(slice factory_address, int contract_type, 
                 .store_slice(asset1)
                 .store_slice(asset2)
                 .store_uint(amm, 3)
+                .store_maybe_ref(amm_settings)
                 .end_cell()
         )
         .end_cell();
 }
 
-(slice, slice, slice, slice, int) parse_owned_double_asset_init_data(cell init_data_cell) inline {
+(slice, slice, slice, slice, int, cell) parse_owned_double_asset_init_data(cell init_data_cell) inline {
     slice cs = init_data_cell.begin_parse();
     slice factory_address = cs~load_msg_addr();
     cs~skip_bits(2);
@@ -131,7 +141,8 @@ cell gen_owned_double_asset_init_data(slice factory_address, int contract_type, 
     slice asset1 = cs~load_asset();
     slice asset2 = cs~load_asset();
     int amm = cs~load_uint(3);
-    return (factory_address, owner, asset1, asset2, amm);
+    cell amm_settings = cs~load_maybe_ref();
+    return (factory_address, owner, asset1, asset2, amm, amm_settings);
 }
 
 cell gen_vault_init_data(slice factory_address, slice asset) inline {
@@ -142,7 +153,7 @@ cell gen_vault_init_data(slice factory_address, slice asset) inline {
         .end_cell();
 }
 
-cell gen_pool_init_data(slice factory_address, slice asset1, slice asset2, int amm) inline {
+cell gen_pool_init_data(slice factory_address, slice asset1, slice asset2, int amm, cell amm_settings) inline {
     (asset1, asset2, _) = sort_assets(asset1, asset2);
     return begin_cell()
         .store_slice(factory_address)
@@ -150,15 +161,46 @@ cell gen_pool_init_data(slice factory_address, slice asset1, slice asset2, int a
         .store_slice(asset1)
         .store_slice(asset2)
         .store_uint(amm, 3)
+        .store_maybe_ref(amm_settings)
         .end_cell();
 }
 
-cell gen_liquidity_depository_init_data(slice factory_address, slice owner, slice asset1, slice asset2, int amm) inline {
-    return gen_owned_double_asset_init_data(factory_address, contract_type::liquidity_depository, owner, asset1, asset2, amm);
+cell gen_liquidity_depository_init_data(
+    slice factory_address,
+    slice owner,
+    slice asset1,
+    slice asset2,
+    int amm,
+    cell amm_settings
+) inline {
+    return gen_owned_double_asset_init_data(
+        factory_address,
+        contract_type::liquidity_depository,
+        owner,
+        asset1,
+        asset2,
+        amm,
+        amm_settings
+    );
 }
 
-cell gen_pool_creator_init_data(slice factory_address, slice owner, slice asset1, slice asset2, int amm) inline {
-    return gen_owned_double_asset_init_data(factory_address, contract_type::pool_creator, owner, asset1, asset2, amm);
+cell gen_pool_creator_init_data(
+    slice factory_address,
+    slice owner,
+    slice asset1,
+    slice asset2,
+    int amm,
+    cell amm_settings
+) inline {
+    return gen_owned_double_asset_init_data(
+        factory_address,
+        contract_type::pool_creator,
+        owner,
+        asset1,
+        asset2,
+        amm,
+        amm_settings
+    );
 }
 
 cell gen_contract_state_init(cell init_code_cell, cell init_data_cell) inline {
@@ -227,7 +269,14 @@ int calculate_vault_address_hash(slice factory_address, cell init_code_cell, sli
     );
 }
 
-int calculate_pool_address_hash(slice factory_address, cell init_code_cell, slice asset1, slice asset2, int amm) inline {
+int calculate_pool_address_hash(
+    slice factory_address,
+    cell init_code_cell,
+    slice asset1,
+    slice asset2,
+    int amm,
+    cell amm_settings
+) inline {
     (asset1, asset2, _) = sort_assets(asset1, asset2);
     cell init_data_cell = begin_cell()
         .store_slice(factory_address)
@@ -235,20 +284,17 @@ int calculate_pool_address_hash(slice factory_address, cell init_code_cell, slic
         .store_slice(asset1)
         .store_slice(asset2)
         .store_uint(amm, 3)
+        .store_maybe_ref(amm_settings)
         .end_cell();
-    return calculate_account_hash_cheap(
-        cell_hash(init_code_cell),
-        cell_depth(init_code_cell),
-        cell_hash(init_data_cell),
-        0
-    );
+    return calculate_account_hash_cheap_from_cells(init_code_cell, init_data_cell);
 }
 
-(slice, (slice, slice, int)) parse_pool_params(slice cs) inline {
+(slice, (slice, slice, int, cell)) parse_pool_params(slice cs) inline {
     slice asset1 = cs~load_asset();
     slice asset2 = cs~load_asset();
     int amm = cs~load_uint(3);
-    return (cs, (asset1, asset2, amm));
+    cell amm_settings = cs~load_maybe_ref();
+    return (cs, (asset1, asset2, amm, amm_settings));
 }
 
 builder build_payout_internal_body(int query_id, slice recipient, int amount, cell notification, cell proof) inline {

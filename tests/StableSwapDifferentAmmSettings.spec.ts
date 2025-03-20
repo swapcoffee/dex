@@ -99,50 +99,51 @@ describe('Test', () => {
 
     async function initPool(first_normalizer: number, second_normalizer: number, first_asset: bigint, second_asset: bigint) {
         // native -> jetton1 stable
-        {
-            await nativeVault.sendCreatePoolNative(
-                admin.getSender(),
-                toNano(1) + first_asset,
-                first_asset,
-                admin.address,
-                new PoolParams(
-                    AssetNative.INSTANCE,
-                    AssetJetton.fromAddress(jetton1.master.address),
-                    AMM.CurveFiStable
-                ),
-                beginCell()
-                    .storeUint(2_000, 16)
-                    .storeCoins(first_normalizer)
-                    .storeCoins(second_normalizer)
-                    .endCell(),
-                null
-            )
+        const ammSettings = beginCell()
+            .storeUint(2_000, 16)
+            .storeCoins(first_normalizer)
+            .storeCoins(second_normalizer)
+            .endCell()
+        await nativeVault.sendCreatePoolNative(
+            admin.getSender(),
+            toNano(1) + first_asset,
+            first_asset,
+            admin.address,
+            new PoolParams(
+                AssetNative.INSTANCE,
+                AssetJetton.fromAddress(jetton1.master.address),
+                AMM.CurveFiStable,
+                ammSettings
+            ),
+            null
+        )
 
-            await jetton1.wallet.sendCreatePoolJetton(admin.getSender(),
-                toNano(1),
-                jetton1.vault.address,
-                second_asset,
-                admin.address,
-                new PoolParams(
-                    AssetNative.INSTANCE,
-                    AssetJetton.fromAddress(jetton1.master.address),
-                    AMM.CurveFiStable
-                ),
-                beginCell().storeUint(2_000, 16).storeCoins(first_normalizer).storeCoins(second_normalizer).endCell(),
-                null
-            )
-        }
+        await jetton1.wallet.sendCreatePoolJetton(admin.getSender(),
+            toNano(1),
+            jetton1.vault.address,
+            second_asset,
+            admin.address,
+            new PoolParams(
+                AssetNative.INSTANCE,
+                AssetJetton.fromAddress(jetton1.master.address),
+                AMM.CurveFiStable,
+                ammSettings
+            ),
+            null
+        )
+        return ammSettings
     }
 
     test('test do stable swap 0 0, forward', async () => {
         await initBch();
-        await initPool(1, 1, 50_000n, 5_000_000n);
+        const ammSettings = await initPool(1, 1, 50_000n, 5_000_000n);
 
         let pool = blockchain.openContract(
             await factory.getPoolJettonBased(
                 AssetNative.INSTANCE,
                 AssetJetton.fromAddress(jetton1.master.address),
-                AMM.CurveFiStable
+                AMM.CurveFiStable,
+                ammSettings
             )
         );
         let before = await jetton1.wallet.getWalletBalance();
@@ -151,7 +152,7 @@ describe('Test', () => {
             nativeVault,
             1000n,
             new SwapStepParams(
-                await factory.getPoolAddressHash(await nativeVault.getAsset(), await jetton1.vault.getAsset(), AMM.CurveFiStable),
+                await factory.getPoolAddressHash(await nativeVault.getAsset(), await jetton1.vault.getAsset(), AMM.CurveFiStable, ammSettings),
                 0n,
                 null
             ),
@@ -176,13 +177,14 @@ describe('Test', () => {
 
     test('test do stable swap 3 0, forward', async () => {
         await initBch();
-        await initPool(1_000, 1, 50_000n, 5_000_000n);
+        const ammSettings = await initPool(1_000, 1, 50_000n, 5_000_000n);
 
         let pool = blockchain.openContract(
             await factory.getPoolJettonBased(
                 AssetNative.INSTANCE,
                 AssetJetton.fromAddress(jetton1.master.address),
-                AMM.CurveFiStable
+                AMM.CurveFiStable,
+                ammSettings
             )
         );
         let before = await jetton1.wallet.getWalletBalance();
@@ -191,7 +193,7 @@ describe('Test', () => {
             nativeVault,
             1000n,
             new SwapStepParams(
-                await factory.getPoolAddressHash(await nativeVault.getAsset(), await jetton1.vault.getAsset(), AMM.CurveFiStable),
+                await factory.getPoolAddressHash(await nativeVault.getAsset(), await jetton1.vault.getAsset(), AMM.CurveFiStable, ammSettings),
                 0n,
                 null
             ),
@@ -216,13 +218,14 @@ describe('Test', () => {
 
     test('test do stable swap 0 0, backward', async () => {
         await initBch();
-        await initPool(1, 1, 5_000_000n, 50_000n);
+        const ammSettings = await initPool(1, 1, 5_000_000n, 50_000n);
 
         let pool = blockchain.openContract(
             await factory.getPoolJettonBased(
                 AssetNative.INSTANCE,
                 AssetJetton.fromAddress(jetton1.master.address),
-                AMM.CurveFiStable
+                AMM.CurveFiStable,
+                ammSettings
             )
         );
 
@@ -230,7 +233,7 @@ describe('Test', () => {
             jetton1.vault,
             1000n,
             new SwapStepParams(
-                await factory.getPoolAddressHash(await nativeVault.getAsset(), await jetton1.vault.getAsset(), AMM.CurveFiStable),
+                await factory.getPoolAddressHash(await nativeVault.getAsset(), await jetton1.vault.getAsset(), AMM.CurveFiStable, ammSettings),
                 0n,
                 null
             ),
@@ -258,6 +261,7 @@ describe('Test', () => {
                         .storeSlice(await nativeVault.getAsset())
                         .storeSlice(await jetton1.vault.getAsset())
                         .storeUint(1, 3)
+                        .storeMaybeRef(ammSettings)
                 )
                 .endCell()
         })
@@ -265,13 +269,14 @@ describe('Test', () => {
 
     test('test do stable swap 0 3, backward', async () => {
         await initBch();
-        await initPool(1, 1_000, 5_000_000n, 50_000n);
+        const ammSettings = await initPool(1, 1_000, 5_000_000n, 50_000n);
 
         let pool = blockchain.openContract(
             await factory.getPoolJettonBased(
                 AssetNative.INSTANCE,
                 AssetJetton.fromAddress(jetton1.master.address),
-                AMM.CurveFiStable
+                AMM.CurveFiStable,
+                ammSettings
             )
         );
 
@@ -279,7 +284,7 @@ describe('Test', () => {
             jetton1.vault,
             1000n,
             new SwapStepParams(
-                await factory.getPoolAddressHash(await nativeVault.getAsset(), await jetton1.vault.getAsset(), AMM.CurveFiStable),
+                await factory.getPoolAddressHash(await nativeVault.getAsset(), await jetton1.vault.getAsset(), AMM.CurveFiStable, ammSettings),
                 0n,
                 null
             ),
@@ -308,6 +313,7 @@ describe('Test', () => {
                         .storeSlice(await nativeVault.getAsset())
                         .storeSlice(await jetton1.vault.getAsset())
                         .storeUint(1, 3)
+                        .storeMaybeRef(ammSettings)
                 )
                 .endCell()
         })

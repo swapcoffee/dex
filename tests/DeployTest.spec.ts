@@ -65,13 +65,12 @@ describe('Test', () => {
             jetton.vault.address,
             toNano(10.0),
             admin.address,
-            PoolParams.fromAddress(jetton.master.address, null, AMM.CurveFiStable),
-            ammSettings,
+            PoolParams.fromAddress(jetton.master.address, null, AMM.CurveFiStable, ammSettings),
             null
         );
 
-        let address1 = await factory.getPoolAddress(jetton.master.address, null, AMM.CurveFiStable);
-        let address2 = await factory.getPoolAddress(null, jetton.master.address, AMM.CurveFiStable);
+        let address1 = await factory.getPoolAddress(jetton.master.address, null, AMM.CurveFiStable, ammSettings);
+        let address2 = await factory.getPoolAddress(null, jetton.master.address, AMM.CurveFiStable, ammSettings);
 
         expect(address1.toRawString()).toBe(address2.toRawString());
         expect(txs.transactions).toHaveTransaction({
@@ -91,8 +90,7 @@ describe('Test', () => {
             toNano(5.0),
             toNano(4.0),
             admin.address,
-            PoolParams.fromAddress(null, jetton.master.address, AMM.CurveFiStable),
-            ammSettings,
+            PoolParams.fromAddress(null, jetton.master.address, AMM.CurveFiStable, ammSettings),
             null
         );
 
@@ -136,7 +134,6 @@ describe('Test', () => {
             toNano(10.0),
             admin.address,
             PoolParams.fromAddress(jetton1.master.address, jetton2.master.address, AMM.ConstantProduct),
-            null,
             null
         );
 
@@ -163,7 +160,6 @@ describe('Test', () => {
             toNano(10.0),
             admin.address,
             PoolParams.fromAddress(jetton1.master.address, jetton2.master.address, AMM.ConstantProduct),
-            null,
             null
         );
         printTransactions(txs.transactions);

@@ -112,16 +112,18 @@ export class PoolParams extends CellSerializable {
     constructor(
         public first_asset: Asset,
         public second_asset: Asset,
-        public amm: AMM
+        public amm: AMM,
+        public ammSettings: Cell | null = null
     ) {
         super()
     }
 
-    static fromAddress(first_asset: Address | null, second_asset: Address | null, amm: AMM): PoolParams {
+    static fromAddress(first_asset: Address | null, second_asset: Address | null, amm: AMM, ammSettings: Cell | null = null): PoolParams {
         return new PoolParams(
             first_asset === null ? AssetNative.INSTANCE : AssetJetton.fromAddress(first_asset),
             second_asset === null ? AssetNative.INSTANCE : AssetJetton.fromAddress(second_asset),
-            amm
+            amm,
+            ammSettings
         );
     }
 
@@ -129,6 +131,7 @@ export class PoolParams extends CellSerializable {
         this.first_asset.write(b);
         this.second_asset.write(b);
         b.storeUint(this.amm, 3);
+        b.storeMaybeRef(this.ammSettings)
     }
 }
 
@@ -149,7 +152,6 @@ export class PublicPoolCreationParams extends CellSerializable {
 export class PrivatePoolCreationParams extends CellSerializable {
     constructor(
         public is_active: boolean = true,
-        public amm_settings: Cell | null = null,
         public extra_settings: Cell | null = null
     ) {
         super()
@@ -157,7 +159,6 @@ export class PrivatePoolCreationParams extends CellSerializable {
 
     public write(b: Builder): void {
         b.storeUint(this.is_active ? 1 : 0, 1)
-        b.storeMaybeRef(this.amm_settings)
         b.storeMaybeRef(this.extra_settings)
     }
 }

@@ -10,7 +10,7 @@ import {
     AssetNative,
     DepositLiquidityParams,
     DepositLiquidityParamsTrimmed,
-    PoolParams, SwapParams, SwapStepParams
+    PoolParams
 } from '../wrappers/types';
 import {CodeCells, compileCodes} from "./utils";
 import {PoolConstantProduct} from "../wrappers/PoolConstantProduct";
@@ -68,7 +68,6 @@ xdescribe('Test', () => {
             toNano(10.0),
             admin.address,
             poolParams,
-            null,
             null
         )
         printTransactions(res.transactions)
@@ -78,7 +77,6 @@ xdescribe('Test', () => {
             toNano(10.0),
             admin.address,
             poolParams,
-            null,
             null
         );
         printTransactions(res.transactions)
@@ -122,7 +120,6 @@ xdescribe('Test', () => {
             toNano(10.0),
             admin.address,
             poolParams,
-            null,
             null
         )
         printTransactions(res.transactions)
@@ -133,7 +130,6 @@ xdescribe('Test', () => {
             toNano(10.0),
             admin.address,
             poolParams,
-            null,
             null
         )
         printTransactions(res.transactions)
@@ -176,7 +172,6 @@ xdescribe('Test', () => {
             toNano(4.0),
             admin.address,
             new PoolParams(AssetNative.INSTANCE, AssetJetton.fromAddress(jetton.master.address), AMM.ConstantProduct),
-            null,
             null
         );
 
@@ -190,7 +185,6 @@ xdescribe('Test', () => {
             toNano(10.0),
             admin.address,
             new PoolParams(AssetNative.INSTANCE, AssetJetton.fromAddress(jetton.master.address), AMM.ConstantProduct),
-            null,
             null
         );
         printTransactions(res2.transactions);

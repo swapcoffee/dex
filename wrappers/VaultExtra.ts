@@ -40,7 +40,7 @@ export class VaultExtra implements Contract {
     }
 
     // TODO: add extra currencies
-    async sendCreatePoolExtra(provider: ContractProvider, via: Sender, value: bigint, recipient: Address, params: PoolParams, amm_settings: Cell | null, notification_data: NotificationData | null) {
+    async sendCreatePoolExtra(provider: ContractProvider, via: Sender, value: bigint, recipient: Address, params: PoolParams, notification_data: NotificationData | null) {
         await this.sendCreatePoolExtraFromParams(
             provider,
             via,
@@ -48,7 +48,7 @@ export class VaultExtra implements Contract {
             params,
             new PoolCreationParams(
                 new PublicPoolCreationParams(recipient, notification_data),
-                new PrivatePoolCreationParams(true, amm_settings, null)
+                new PrivatePoolCreationParams(true, null)
             )
         )
     }

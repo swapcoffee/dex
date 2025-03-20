@@ -42,7 +42,6 @@ describe('Test', () => {
                 amount,
                 sender.address,
                 param,
-                null,
                 notification
             )
         } else if (asset instanceof AssetJetton) {
@@ -66,7 +65,6 @@ describe('Test', () => {
                 amount,
                 sender.address,
                 param,
-                null,
                 notification
             )
         } else if (asset instanceof AssetExtra) {
@@ -75,7 +73,6 @@ describe('Test', () => {
                 toNano(1),
                 sender.address,
                 param,
-                null,
                 notification
             )
         } else {

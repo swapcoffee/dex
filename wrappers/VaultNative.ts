@@ -40,7 +40,7 @@ export class VaultNative implements Contract {
         await this.sendMessage(provider, via, value, b.endCell());
     }
 
-    async sendCreatePoolNative(provider: ContractProvider, via: Sender, value: bigint, amount: bigint, recipient: Address, params: PoolParams, amm_settings: Cell | null, notification_data: NotificationData | null) {
+    async sendCreatePoolNative(provider: ContractProvider, via: Sender, value: bigint, amount: bigint, recipient: Address, params: PoolParams, notification_data: NotificationData | null) {
         await this.sendCreatePoolNativeFromParams(
             provider,
             via,
@@ -49,7 +49,7 @@ export class VaultNative implements Contract {
             params,
             new PoolCreationParams(
                 new PublicPoolCreationParams(recipient, notification_data),
-                new PrivatePoolCreationParams(true, amm_settings, null)
+                new PrivatePoolCreationParams(true, null)
             )
         )
     }

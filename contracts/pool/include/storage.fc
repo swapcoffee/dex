@@ -26,9 +26,8 @@ global int storage::protocol_fee_collected::asset2;
     slice data_cs = get_data().begin_parse();
     storage::init_code_cell = data_cs~load_ref();
     storage::init_data_cell = data_cs~load_ref();
-    (storage::factory_address, storage::asset1, storage::asset2, storage::amm) = parse_pool_init_data(storage::init_data_cell);
+    (storage::factory_address, storage::asset1, storage::asset2, storage::amm, storage::amm_settings) = parse_pool_init_data(storage::init_data_cell);
 
-    storage::amm_settings = data_cs~load_maybe_ref();
     storage::is_active = data_cs~load_bool();
     storage::reserve1 = data_cs~load_coins();
     storage::reserve2 = data_cs~load_coins();
@@ -40,12 +39,11 @@ global int storage::protocol_fee_collected::asset2;
     storage::lp_wallet_code = data_cs~load_ref();
 }
 
-() update_settings(cell amm_settings, int protocol_fee, int lp_fee, int is_active) impure inline {
+() update_settings(int protocol_fee, int lp_fee, int is_active) impure inline {
     set_data(
         begin_cell()
             .store_ref(storage::init_code_cell)
             .store_ref(storage::init_data_cell)
-            .store_maybe_ref(amm_settings)
             .store_bool(is_active)
             .store_coins(storage::reserve1)
             .store_coins(storage::reserve2)
@@ -70,7 +68,6 @@ global int storage::protocol_fee_collected::asset2;
         begin_cell()
             .store_ref(storage::init_code_cell)
             .store_ref(storage::init_data_cell)
-            .store_maybe_ref(storage::amm_settings)
             .store_bool(storage::is_active)
             .store_coins(reserve1)
             .store_coins(reserve2)

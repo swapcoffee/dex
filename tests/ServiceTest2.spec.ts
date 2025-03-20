@@ -1,5 +1,5 @@
 import {Blockchain, SandboxContract, TreasuryContract} from '@ton/sandbox';
-import {Address, beginCell, toNano} from '@ton/core';
+import { Address, beginCell, Cell, toNano } from '@ton/core';
 import '@ton/test-utils';
 import {Factory} from "../wrappers/Factory";
 import {VaultJetton} from "../wrappers/VaultJetton";
@@ -29,6 +29,16 @@ describe('Test', () => {
 
     let jetton1: JettonDataWithVault
     let nativeVault: SandboxContract<VaultNative>
+
+    const stableAmmSettings = beginCell().storeUint(2_000, 16).storeCoins(1).storeCoins(1).endCell()
+
+    function resolveAmmSettings(amm: AMM): Cell | null {
+        if (amm == AMM.ConstantProduct) {
+            return null
+        } else {
+            return stableAmmSettings
+        }
+    }
 
     async function doSwap(
         sender: SandboxContract<TreasuryContract>,
@@ -108,7 +118,6 @@ describe('Test', () => {
                 AssetJetton.fromAddress(jetton1.master.address),
                 AMM.ConstantProduct
             ),
-            null,
             null
         );
 
@@ -122,13 +131,9 @@ describe('Test', () => {
                 new PoolParams(
                     AssetNative.INSTANCE,
                     AssetJetton.fromAddress(jetton1.master.address),
-                    AMM.CurveFiStable
+                    AMM.CurveFiStable,
+                    stableAmmSettings
                 ),
-                beginCell()
-                    .storeUint(2_000, 16)
-                    .storeCoins(1)
-                    .storeCoins(1)
-                    .endCell(),
                 null
             )
             await nativeVault.sendCreatePoolNative(
@@ -139,13 +144,9 @@ describe('Test', () => {
                 new PoolParams(
                     AssetNative.INSTANCE,
                     AssetJetton.fromAddress(jetton1.master.address),
-                    AMM.CurveFiStable
+                    AMM.CurveFiStable,
+                    stableAmmSettings
                 ),
-                beginCell()
-                    .storeUint(2_000, 16)
-                    .storeCoins(1)
-                    .storeCoins(1)
-                    .endCell(),
                 null
             )
         }
@@ -161,7 +162,8 @@ describe('Test', () => {
             await factory.getPoolJettonBased(
                 await vaultA.getAsset(),
                 await vaultB.getAsset(),
-                amm
+                amm,
+                resolveAmmSettings(amm)
             )
         )
         console.log(await pool.getPoolData());
@@ -170,7 +172,7 @@ describe('Test', () => {
             vaultA,
             1000n,
             new SwapStepParams(
-                await factory.getPoolAddressHash(await vaultA.getAsset(), await vaultB.getAsset(), amm),
+                await factory.getPoolAddressHash(await vaultA.getAsset(), await vaultB.getAsset(), amm, resolveAmmSettings(amm)),
                 0n,
                 null
             ),
@@ -200,7 +202,8 @@ describe('Test', () => {
             await factory.getPoolJettonBased(
                 await vaultA.getAsset(),
                 await vaultB.getAsset(),
-                amm
+                amm,
+                resolveAmmSettings(amm)
             )
         )
 
@@ -216,7 +219,7 @@ describe('Test', () => {
             vaultA,
             1000n,
             new SwapStepParams(
-                await factory.getPoolAddressHash(await vaultA.getAsset(), await vaultB.getAsset(), amm),
+                await factory.getPoolAddressHash(await vaultA.getAsset(), await vaultB.getAsset(), amm, resolveAmmSettings(amm)),
                 0n,
                 null
             ),

@@ -29,24 +29,26 @@ describe('Test', () => {
     let nativeVault: SandboxContract<VaultNative>
     let extraVault: SandboxContract<VaultExtra>
 
-    let feesVariables = [
-        [null as number|null, null as number|null, AMM.ConstantProduct],
-        [null as number|null, null as number|null, AMM.CurveFiStable],
-        [100, 200, AMM.ConstantProduct],
-        [4000, 500, AMM.CurveFiStable]
-    ]
+    // amm - protocol_fee - lp_fee - is_active
+    const updatePoolVariables = [AMM.ConstantProduct, AMM.CurveFiStable].flatMap(amm => {
+        return [
+            [amm, -1, -1, -1],
+            [amm, 100, 200, -1],
+            [amm, 4000, 500, -1],
+            [amm, -1, -1, 0],
+            [amm, 1234, 5678, 0]
+        ]
+    })
 
-    let settingsVars = [
-        [null as Cell | null],
-        [beginCell().endCell()],
-        [beginCell().storeUint(10, 10).endCell()],
-    ].map(it => {
-            return [
-                [it[0], AMM.ConstantProduct],
-                [it[0], AMM.CurveFiStable]
-            ]
+    const stableAmmSettings = beginCell().storeUint(2_000, 16).storeCoins(1).storeCoins(1).endCell()
+
+    function resolveAmmSettings(amm: AMM): Cell | null {
+        if (amm == AMM.ConstantProduct) {
+            return null
+        } else {
+            return stableAmmSettings
         }
-    ).flat();
+    }
 
     beforeEach(async () => {
         blockchain = await Blockchain.create();
@@ -84,7 +86,6 @@ describe('Test', () => {
                     AssetJetton.fromAddress(jetton1.master.address),
                     AMM.ConstantProduct
                 ),
-                null,
                 null
             )
             await nativeVault.sendCreatePoolNative(
@@ -97,7 +98,6 @@ describe('Test', () => {
                     AssetJetton.fromAddress(jetton1.master.address),
                     AMM.ConstantProduct
                 ),
-                null,
                 null
             )
         }
@@ -112,9 +112,9 @@ describe('Test', () => {
                 new PoolParams(
                     AssetNative.INSTANCE,
                     AssetJetton.fromAddress(jetton1.master.address),
-                    AMM.CurveFiStable
+                    AMM.CurveFiStable,
+                    stableAmmSettings
                 ),
-                beginCell().storeUint(2_000, 16).storeCoins(1).storeCoins(1).endCell(),
                 null
             )
             await nativeVault.sendCreatePoolNative(
@@ -125,13 +125,9 @@ describe('Test', () => {
                 new PoolParams(
                     AssetNative.INSTANCE,
                     AssetJetton.fromAddress(jetton1.master.address),
-                    AMM.CurveFiStable
+                    AMM.CurveFiStable,
+                    stableAmmSettings
                 ),
-                beginCell()
-                    .storeUint(2_000, 16)
-                    .storeCoins(1)
-                    .storeCoins(1)
-                    .endCell(),
                 null
             )
         }
@@ -319,10 +315,14 @@ describe('Test', () => {
             AssetJetton.fromAddress(jetton1.master.address),
             AMM.ConstantProduct
         );
-        let txs = await factory.sendUpdateContract(admin.getSender(), toNano(1),
+        let txs = await factory.sendUpdateContract(
+            admin.getSender(),
+            toNano(1),
             address,
             testContractCode,
-            beginCell().storeUint(10, 10).endCell())
+            beginCell().storeUint(10, 10).endCell()
+        )
+        printTransactions(txs.transactions)
         expect(txs.transactions).toHaveTransaction({
             from: admin.address,
             to: factory.address,
@@ -351,12 +351,8 @@ describe('Test', () => {
                 AssetJetton.fromAddress(jetton1.master.address),
                 AMM.ConstantProduct
             ),
-
-            null,
-
             null,
             null,
-
             null
         )
         expect(txs.transactions).toHaveTransaction({
@@ -367,129 +363,34 @@ describe('Test', () => {
         })
     });
 
-    it('from factory update pool settings, by admin, ok', async () => {
-        let fee = new Fees(
-            new Fee(100n),
-            new Fee(100n),
-            new Fee(100n),
-            new Fee(100n)
-        );
-        let txs = await factory.sendUpdatePool(admin.getSender(), toNano(1),
-            new PoolParams(
-                AssetNative.INSTANCE,
-                AssetJetton.fromAddress(jetton1.master.address),
-                AMM.ConstantProduct
-            ),
-
-            null,
-
-            null,
-            null,
-
-            null
-            )
-        printTransactions(txs.transactions);
-        expect(txs.transactions).toHaveTransaction({
-            from: admin.address,
-            to: factory.address,
-            success: true,
-            exitCode: 0
-        })
-        expect(txs.transactions).toHaveTransaction({
-            from: factory.address,
-            to: await factory.getPoolAddress(AssetNative.INSTANCE,
-                AssetJetton.fromAddress(jetton1.master.address),
-                AMM.ConstantProduct),
-            success: true,
-            exitCode: 0
-        })
-
+    test.each(updatePoolVariables)
+    ('update pool (amm=%i, protocol_fee=%i, lp_fee=%i, is_active=%i), ok', async (_amm, _protocol_fee, _lp_fee, _is_active) => {
+        const amm = _amm as AMM
+        const ammSettings = resolveAmmSettings(amm)
+        const protocol_fee = _protocol_fee === -1 ? null : _protocol_fee as number
+        const lp_fee = _lp_fee === -1 ? null : _lp_fee as number
+        const is_active = _is_active === -1 ? null : _is_active === 1
         let pool = blockchain.openContract(
             await factory.getPoolJettonBased(
                 AssetNative.INSTANCE,
                 AssetJetton.fromAddress(jetton1.master.address),
-                AMM.ConstantProduct
-            )
-        );
-
-        let data = await pool.getPoolData();
-        expect(data.ammSettings).toBe(null);
-    });
-
-    test.each(feesVariables)
-    ('update fees for pool, ok', async (protocol_fee, lp_fee, t) => {
-        let pool = blockchain.openContract(
-            await factory.getPoolJettonBased(
-                AssetNative.INSTANCE,
-                AssetJetton.fromAddress(jetton1.master.address),
-                t as AMM
+                amm,
+                ammSettings
             )
         );
         let dataBefore = await pool.getPoolData();
-        let txs = await factory.sendUpdatePool(admin.getSender(), toNano(1),
+        let txs = await factory.sendUpdatePool(
+            admin.getSender(),
+            toNano(1),
             new PoolParams(
                 AssetNative.INSTANCE,
                 AssetJetton.fromAddress(jetton1.master.address),
-                t as AMM
+                amm,
+                ammSettings
             ),
-            null,
-
             protocol_fee,
             lp_fee,
-
-            null
-
-            )
-        printTransactions(txs.transactions);
-        expect(txs.transactions).toHaveTransaction({
-            from: admin.address,
-            to: factory.address,
-            success: true,
-            exitCode: 0
-        })
-        expect(txs.transactions).toHaveTransaction({
-            from: factory.address,
-            to: await factory.getPoolAddress(AssetNative.INSTANCE,
-                AssetJetton.fromAddress(jetton1.master.address),
-                t as AMM),
-            success: true,
-            exitCode: 0
-        })
-
-
-        let data = await pool.getPoolData();
-        if(protocol_fee == null) {
-            expect(data.protocolFee).toBe(dataBefore.protocolFee)
-            expect(data.lpFee).toBe(dataBefore.lpFee)
-        } else {
-            expect(data.protocolFee).toBe(BigInt(protocol_fee))
-            expect(data.lpFee).toBe(BigInt(lp_fee as number))
-        }
-    });
-
-    test.each(settingsVars)
-    ('update settings for pool, ok', async (settings, t) => {
-        let pool = blockchain.openContract(
-            await factory.getPoolJettonBased(
-                AssetNative.INSTANCE,
-                AssetJetton.fromAddress(jetton1.master.address),
-                t as AMM
-            )
-        );
-        let dataBefore = await pool.getPoolData();
-        let txs = await factory.sendUpdatePool(admin.getSender(), toNano(1),
-            new PoolParams(
-                AssetNative.INSTANCE,
-                AssetJetton.fromAddress(jetton1.master.address),
-                t as AMM
-            ),
-
-            settings as Cell | null,
-
-            null,
-            null,
-
-            null
+            is_active
         )
         printTransactions(txs.transactions);
         expect(txs.transactions).toHaveTransaction({
@@ -500,19 +401,28 @@ describe('Test', () => {
         })
         expect(txs.transactions).toHaveTransaction({
             from: factory.address,
-            to: await factory.getPoolAddress(AssetNative.INSTANCE,
+            to: await factory.getPoolAddress(
+                AssetNative.INSTANCE,
                 AssetJetton.fromAddress(jetton1.master.address),
-                t as AMM),
+                amm,
+                ammSettings
+            ),
             success: true,
             exitCode: 0
         })
 
         let data = await pool.getPoolData();
-        console.log(data);
-        if (settings == null) {
-            expect(data.ammSettings?.toString()).toBe(dataBefore.ammSettings?.toString());
+        if (protocol_fee === null) {
+            expect(data.protocolFee).toBe(dataBefore.protocolFee)
+            expect(data.lpFee).toBe(dataBefore.lpFee)
         } else {
-            expect(data.ammSettings?.toString()).toBe(settings?.toString());
+            expect(data.protocolFee).toBe(BigInt(protocol_fee))
+            expect(data.lpFee).toBe(BigInt(lp_fee as number))
+        }
+        if (is_active === null) {
+            expect(data.isActive).toBe(dataBefore.isActive)
+        } else {
+            expect(data.isActive).toBe(BigInt(is_active))
         }
     });
 
@@ -523,7 +433,8 @@ describe('Test', () => {
             await factory.getPoolAddress(
                 AssetNative.INSTANCE,
                 AssetJetton.fromAddress(jetton1.master.address),
-                AMM.CurveFiStable
+                AMM.CurveFiStable,
+                stableAmmSettings
             ),
             AssetNative.INSTANCE,
             1n,
@@ -542,7 +453,8 @@ describe('Test', () => {
         const poolAddress = await factory.getPoolAddress(
             AssetNative.INSTANCE,
             AssetJetton.fromAddress(jetton1.master.address),
-            AMM.CurveFiStable
+            AMM.CurveFiStable,
+            stableAmmSettings
         )
         let txs = await factory.sendWithdraw(
             admin.getSender(),
@@ -573,7 +485,8 @@ describe('Test', () => {
                 await factory.getPoolAddressHash(
                     AssetNative.INSTANCE,
                     AssetJetton.fromAddress(jetton1.master.address),
-                    AMM.CurveFiStable
+                    AMM.CurveFiStable,
+                    stableAmmSettings
                 ),
                 0n,
                 null

@@ -81,16 +81,15 @@ global cell storage::pool_creator_code_cell;
     (int opcode, int query_id) = (in_msg_body~load_uint(32), in_msg_body~load_uint(64));
     if (opcode == opcodes::create_pool_creator_request) {
         int amount = in_msg_body~load_coins();
-        (slice asset1, slice asset2, int amm) = in_msg_body~parse_pool_params();
+        (slice asset1, slice asset2, int amm, cell amm_settings) = in_msg_body~parse_pool_params();
         cell creation_params = in_msg_body~load_ref();
         slice tx_initiator = in_msg_body~load_msg_addr();
         cell proof = in_msg_body~load_ref();
 
         slice creation_params_cs = creation_params.begin_parse();
-        slice recipient = creation_params_cs~load_msg_addr();
-        cell notification_data = creation_params_cs~load_maybe_ref();
+        creation_params_cs~load_msg_addr(); ;; recipient
+        creation_params_cs~load_maybe_ref(); ;; notification_data
         int is_active = creation_params_cs~load_uint(1);
-        cell amm_settings = creation_params_cs~load_maybe_ref();
         cell extra_settings = creation_params_cs~load_maybe_ref();
 
         throw_unless(errors::not_an_admin, ((amm == amm::constant_product) & (is_active == 1) & cell_null?(extra_settings)) | equal_slice_bits(tx_initiator, storage::admin_address));
@@ -100,7 +99,7 @@ global cell storage::pool_creator_code_cell;
         throw_unless(errors::wrong_sender, proof_cs~load_uint(2) == contract_type::vault);
         slice asset = proof_cs~load_asset();
 
-        cell init_data = gen_pool_creator_init_data(my_address(), recipient, asset1, asset2, amm);
+        cell init_data = gen_pool_creator_init_data(my_address(), tx_initiator, asset1, asset2, amm, amm_settings);
         cell state_init = gen_contract_state_init(storage::init_code_cell, init_data);
         int destination_hash = cell_hash(state_init);
 
@@ -123,7 +122,6 @@ global cell storage::pool_creator_code_cell;
                         .store_uint(opcodes::create_pool_creator_internal, 32)
                         .store_uint(query_id, 64)
                         .store_slice(asset)
-                        .store_uint(amm, 3)
                         .store_coins(amount)
                         .store_ref(creation_params)
                         .end_cell()
@@ -134,7 +132,8 @@ global cell storage::pool_creator_code_cell;
         int amount = in_msg_body~load_coins();
         cell params = in_msg_body~load_ref();
         cell pool_params = in_msg_body~load_ref();
-        (_, (slice asset1, slice asset2, int amm)) = parse_pool_params(pool_params.begin_parse());
+        (_, (slice asset1, slice asset2, int amm, cell amm_settings)) = parse_pool_params(pool_params.begin_parse());
+        slice tx_initiator = in_msg_body~load_msg_addr();
         cell proof = in_msg_body~load_ref();
 
         slice proof_cs = verify_proof(my_address(), storage::init_code_cell, sender_address, proof);
@@ -142,9 +141,7 @@ global cell storage::pool_creator_code_cell;
         throw_unless(errors::wrong_sender, proof_cs~load_uint(2) == contract_type::vault);
         slice asset = proof_cs~load_asset();
 
-        (_, slice recipient) = load_msg_addr(params.begin_parse());
-
-        cell init_data = gen_liquidity_depository_init_data(my_address(), recipient, asset1, asset2, amm);
+        cell init_data = gen_liquidity_depository_init_data(my_address(), tx_initiator, asset1, asset2, amm, amm_settings);
         cell state_init = gen_contract_state_init(storage::init_code_cell, init_data);
         int destination_hash = cell_hash(state_init);
 
@@ -167,7 +164,6 @@ global cell storage::pool_creator_code_cell;
                         .store_uint(opcodes::create_liquidity_depository_internal, 32)
                         .store_uint(query_id, 64)
                         .store_slice(asset)
-                        .store_uint(amm, 3)
                         .store_coins(amount)
                         .store_ref(params)
                         .end_cell()
@@ -184,16 +180,15 @@ global cell storage::pool_creator_code_cell;
         slice recipient = creation_params_cs~load_msg_addr();
         cell notification_data = creation_params_cs~load_maybe_ref();
         int is_active = creation_params_cs~load_uint(1);
-        cell amm_settings = creation_params_cs~load_maybe_ref();
         cell extra_settings = creation_params_cs~load_maybe_ref();
 
         slice proof_cs = verify_proof(my_address(), storage::init_code_cell, sender_address, proof);
 
         throw_unless(errors::wrong_sender, proof_cs~load_uint(2) == contract_type::pool_creator);
         proof_cs = proof_cs~load_ref().begin_parse();
-        (slice asset1, slice asset2, int amm) = proof_cs~parse_pool_params();
+        (slice asset1, slice asset2, int amm, cell amm_settings) = proof_cs~parse_pool_params();
 
-        cell init_data = gen_pool_init_data(my_address(), asset1, asset2, amm);
+        cell init_data = gen_pool_init_data(my_address(), asset1, asset2, amm, amm_settings);
         cell state_init = gen_contract_state_init(storage::init_code_cell, init_data);
         int destination_hash = cell_hash(state_init);
 
@@ -207,8 +202,7 @@ global cell storage::pool_creator_code_cell;
                     begin_cell()
                         .store_ref(storage::init_code_cell)
                         .store_ref(init_data)
-                        .store_maybe_ref(amm_settings)
-                        .store_bool(is_active == 1)
+                        .store_bool(is_active != 0)
                         .store_coins(0) ;; reserve1
                         .store_coins(0) ;; reserve2
                         .store_coins(0) ;; total supply
@@ -324,14 +318,15 @@ global cell storage::pool_creator_code_cell;
         }
     } elseif (opcode == opcodes::update_pool) {
         throw_unless(errors::not_an_admin, equal_slice_bits(storage::admin_address, sender_address));
-        (slice asset1, slice asset2, int amm) = in_msg_body~parse_pool_params();
+        (slice asset1, slice asset2, int amm, cell amm_settings) = in_msg_body~parse_pool_params();
         cell params = in_msg_body~load_ref();
         int pool_address_hash = calculate_pool_address_hash(
             my_address(),
             storage::init_code_cell,
             asset1,
             asset2,
-            amm
+            amm,
+            amm_settings
         );
         send_hash_builder(
             pool_address_hash,
@@ -391,27 +386,27 @@ global cell storage::pool_creator_code_cell;
     return (construct_address(BASECHAIN, hash), hash);
 }
 
-(slice, int) get_pool_address(slice asset1, slice asset2, int amm) method_id {
+(slice, int) get_pool_address(slice asset1, slice asset2, int amm, cell amm_settings) method_id {
     throw_if(errors::same_assets, equal_slice_bits(asset1, asset2));
     load_data();
-    int hash = calculate_pool_address_hash(my_address(), storage::init_code_cell, asset1, asset2, amm);
+    int hash = calculate_pool_address_hash(my_address(), storage::init_code_cell, asset1, asset2, amm, amm_settings);
     return (construct_address(BASECHAIN, hash), hash);
 }
 
-(slice, int) get_pool_creator_address(slice owner, slice asset1, slice asset2, int amm) method_id {
+(slice, int) get_pool_creator_address(slice owner, slice asset1, slice asset2, int amm, cell amm_settings) method_id {
     load_data();
     int hash = calculate_account_hash_cheap_from_cells(
         storage::init_code_cell,
-        gen_pool_creator_init_data(my_address(), owner, asset1, asset2, amm)
+        gen_pool_creator_init_data(my_address(), owner, asset1, asset2, amm, amm_settings)
     );
     return (construct_address(BASECHAIN, hash), hash);
 }
 
-(slice, int) get_liquidity_depository_address(slice owner, slice asset1, slice asset2, int amm) method_id {
+(slice, int) get_liquidity_depository_address(slice owner, slice asset1, slice asset2, int amm, cell amm_settings) method_id {
     load_data();
     int hash = calculate_account_hash_cheap_from_cells(
         storage::init_code_cell,
-        gen_liquidity_depository_init_data(my_address(), owner, asset1, asset2, amm)
+        gen_liquidity_depository_init_data(my_address(), owner, asset1, asset2, amm, amm_settings)
     );
     return (construct_address(BASECHAIN, hash), hash);
 }

@@ -106,6 +106,7 @@ describe('Test', () => {
                         .storeSlice(buildNativeAsset())
                         .storeSlice(buildExtraAsset(1))
                         .storeUint(0, 3)
+                        .storeMaybeRef(null)
                         .endCell())
                     .endCell()
             }
@@ -160,6 +161,7 @@ describe('Test', () => {
                         .storeSlice(buildNativeAsset())
                         .storeSlice(buildExtraAsset(1))
                         .storeUint(0, 3)
+                        .storeMaybeRef(null)
                         .endCell())
                     .endCell()
             }
@@ -217,6 +219,7 @@ describe('Test', () => {
                         .storeSlice(buildNativeAsset())
                         .storeSlice(buildExtraAsset(1))
                         .storeUint(0, 3)
+                        .storeMaybeRef(null)
                         .endCell())
                     .endCell()
             }
@@ -274,6 +277,7 @@ describe('Test', () => {
                         .storeSlice(buildNativeAsset())
                         .storeSlice(buildExtraAsset(1))
                         .storeUint(0, 3)
+                        .storeMaybeRef(null)
                         .endCell())
                     .endCell()
             }
@@ -331,6 +335,7 @@ describe('Test', () => {
                         .storeSlice(buildNativeAsset())
                         .storeSlice(buildExtraAsset(1))
                         .storeUint(0, 3)
+                        .storeMaybeRef(null)
                         .endCell())
                     .endCell()
             }
@@ -398,6 +403,7 @@ describe('Test', () => {
                         .storeSlice(buildNativeAsset())
                         .storeSlice(buildExtraAsset(1))
                         .storeUint(0, 3)
+                        .storeMaybeRef(null)
                         .endCell())
                     .endCell()
             }
@@ -465,6 +471,7 @@ describe('Test', () => {
                         .storeSlice(buildNativeAsset())
                         .storeSlice(buildExtraAsset(1))
                         .storeUint(0, 3)
+                        .storeMaybeRef(null)
                         .endCell())
                     .endCell()
             }
@@ -552,6 +559,7 @@ describe('Test', () => {
                         .storeSlice(buildNativeAsset())
                         .storeSlice(buildExtraAsset(1))
                         .storeUint(0, 3)
+                        .storeMaybeRef(null)
                         .endCell())
                     .endCell()
             }
@@ -638,6 +646,7 @@ describe('Test', () => {
                         .storeSlice(buildNativeAsset())
                         .storeSlice(buildExtraAsset(1))
                         .storeUint(0, 3)
+                        .storeMaybeRef(null)
                         .endCell())
                     .endCell()
             }

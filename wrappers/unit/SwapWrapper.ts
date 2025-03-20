@@ -39,8 +39,8 @@ export class SwapWrapper implements Contract {
                     .storeSlice(asset1)
                     .storeSlice(asset2)
                     .storeUint(amm, 3)
+                    .storeMaybeRef(ammSettings)
             )
-            .storeMaybeRef(ammSettings)
             .storeUint(1, 1)
             .storeCoins(reserve1)
             .storeCoins(reserve2)
@@ -139,11 +139,11 @@ export class SwapWrapper implements Contract {
             asset1: res.stack.readCellOpt(),
             asset2: res.stack.readCellOpt(),
             amm: res.stack.readBigNumber(),
+            ammSettings: res.stack.readCellOpt(),
             isActive: res.stack.readBigNumber(),
             reserve1: res.stack.readBigNumber(),
             reserve2: res.stack.readBigNumber(),
             totalSupply: res.stack.readBigNumber(),
-            ammSettings: res.stack.readCellOpt(),
             protocolFee: res.stack.readBigNumber(),
             lpFee: res.stack.readBigNumber(),
         }
