@@ -44,7 +44,7 @@ X = 4 for administrative actions
 ;; contract_update code:(Maybe ^Cell) data:(Maybe ^Cell) = ContractUpdate;
 
 ;; The following may be used as a custom_payload within burn operation:
-;; withdraw_liquidity_params deadline:uint32 condition:WithdrawLiquidityCondition extra_settings:(Maybe ^Cell) on_success:(Maybe ^NotificationDataSingle) = DepositLiquidityParamsTrimmed;
+;; withdraw_liquidity_params deadline:uint32 condition:WithdrawLiquidityCondition extra_settings:(Maybe ^Cell) on_success:(Maybe ^NotificationDataSingle) = WithdrawLiquidityParams;
 
 ;; user -> vault_native
 ;; swap_native#c0ffee00 query_id:uint64 amount:Coins _:SwapStepParams params:^SwapParams = SwapNative;
