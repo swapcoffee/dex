@@ -441,6 +441,8 @@ describe('Test', () => {
         let wallet = await getWallet(user.address, pool);
         let txs = await wallet.sendBurnTokens(user.getSender(), toNano('1.0'), toNano('1.0') - 1_000n);
 
+        printTransactions(txs.transactions)
+
         expect((await pool.getJettonData()).totalSupply).toBe(1_000n);
         expect((await getUserLp(user.address, pool))).toBe(0n);
         expect(txs.transactions).toHaveTransaction({

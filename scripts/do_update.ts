@@ -1,22 +1,8 @@
-import { Address, beginCell, Cell, OpenedContract, toNano } from '@ton/core';
-import { compile, NetworkProvider, UIProvider } from '@ton/blueprint';
-import { Blockchain, SandboxContract, TreasuryContract } from '@ton/sandbox';
-import { JettonMaster, JettonWallet } from '../wrappers/Jetton';
-import { getTransactionAccount } from '../wrappers/utils';
+import { Address, Cell, toNano } from '@ton/core';
+import { NetworkProvider } from '@ton/blueprint';
 import { waitSeqNoChange } from './utils';
-import { compileCodes, lpWalletCode } from '../tests/utils';
+import { compileCodes } from '../tests/utils';
 import { buildDataCell, Factory } from '../wrappers/Factory';
-import {
-    AMM,
-    Asset,
-    AssetNative,
-    DepositLiquidityParams,
-    DepositLiquidityParamsTrimmed,
-    PoolParams,
-    SwapParams,
-    SwapStepParams,
-} from '../wrappers/types';
-import { VaultNative } from '../wrappers/VaultNative';
 
 export async function run(provider: NetworkProvider) {
     const ui = provider.ui();

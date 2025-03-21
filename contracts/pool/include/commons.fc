@@ -81,8 +81,15 @@ int get_direction_from_proof(slice cs, slice previous_asset_hint) inline {
     throw(excno);
 }
 
-() send_back(int query_id, int amount1, int amount2, slice recipient, cell notification_data, int self_destroy) impure inline_ref {
-    cell notification_data_single = null();
+() send_back(
+    int query_id,
+    int amount1,
+    int amount2,
+    slice recipient,
+    cell notification_data,
+    cell notification_data_single,
+    int self_destroy
+) impure inline_ref {
     ifnot (cell_null?(notification_data)) {
         slice notification_data_cs = notification_data.begin_parse();
         notification_data_cs~load_maybe_ref(); ;; on_success
@@ -140,7 +147,7 @@ int get_direction_from_proof(slice cs, slice previous_asset_hint) inline {
             .store_coins(storage::reserve1)
             .store_coins(storage::reserve2)
     );
-    send_back(query_id, amount1, amount2, recipient, notification_data, self_destroy);
+    send_back(query_id, amount1, amount2, recipient, notification_data, null(), self_destroy);
     commit();
     throw(excno);
 }

@@ -1,10 +1,7 @@
 import { Address, beginCell, Cell, OpenedContract, toNano } from '@ton/core';
-import { compile, NetworkProvider, UIProvider } from '@ton/blueprint';
-import { Blockchain, SandboxContract, TreasuryContract } from '@ton/sandbox';
+import { NetworkProvider, UIProvider } from '@ton/blueprint';
 import { JettonMaster, JettonWallet } from '../wrappers/Jetton';
-import { getTransactionAccount } from '../wrappers/utils';
-import { waitSeqNoChange } from './utils';
-import { compileCodes, lpWalletCode } from '../tests/utils';
+import { compileCodes } from '../tests/utils';
 import { Factory } from '../wrappers/Factory';
 import { AMM, Asset, DepositLiquidityParams, DepositLiquidityParamsTrimmed, PoolParams } from '../wrappers/types';
 import { VaultNative } from '../wrappers/VaultNative';
@@ -51,8 +48,7 @@ async function sendMessage(
                 toNano(0.1) + asset1,
                 asset1,
                 provider.sender().address!!,
-                new PoolParams(Asset.fromAny(token1), Asset.fromAny(token2), amm),
-                ammSettings,
+                new PoolParams(Asset.fromAny(token1), Asset.fromAny(token2), amm, ammSettings),
                 null,
             );
         } else {
@@ -62,7 +58,7 @@ async function sendMessage(
                 asset1,
                 new DepositLiquidityParams(
                     new DepositLiquidityParamsTrimmed(BigInt((1 << 30) * 2), 0n, null, null, null),
-                    PoolParams.fromAddress(token1, token2, amm),
+                    PoolParams.fromAddress(token1, token2, amm, ammSettings),
                 ),
             );
         }
@@ -93,7 +89,7 @@ async function sendMessage(
                 asset1,
                 new DepositLiquidityParams(
                     new DepositLiquidityParamsTrimmed(BigInt((1 << 30) * 2), 0n, null, null, null),
-                    PoolParams.fromAddress(token1, token2, amm),
+                    PoolParams.fromAddress(token1, token2, amm, ammSettings),
                 ),
             );
         }
