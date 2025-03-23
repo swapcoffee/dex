@@ -89,7 +89,7 @@ max coins = 1329227995784915872903807060280344575
 
 () send_cell_extra_carry_inbound(slice destination, int extra_id, int extra_amount, cell body) impure inline {
     cell extra_dict = new_dict();
-    slice extra_amount_slice = begin_cell().store_coins(extra_amount).end_cell().begin_parse();
+    slice extra_amount_slice = begin_cell().store_extra(extra_amount).end_cell().begin_parse();
     extra_dict~udict_set(32, extra_id, extra_amount_slice);
 
     cell msg = begin_cell()
@@ -106,7 +106,7 @@ max coins = 1329227995784915872903807060280344575
 ;; at most 519 bits and 3 refs
 () send_builder_extra_carry_inbound(slice destination, int extra_id, int extra_amount, builder body) impure inline {
     cell extra_dict = new_dict();
-    slice extra_amount_slice = begin_cell().store_coins(extra_amount).end_cell().begin_parse();
+    slice extra_amount_slice = begin_cell().store_extra(extra_amount).end_cell().begin_parse();
     extra_dict~udict_set(32, extra_id, extra_amount_slice);
 
     cell msg = begin_cell()

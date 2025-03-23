@@ -3,24 +3,17 @@ import { compile, NetworkProvider, UIProvider } from '@ton/blueprint';
 import { Blockchain, SandboxContract, TreasuryContract } from '@ton/sandbox';
 import { JettonMaster, JettonWallet } from '../wrappers/Jetton';
 import { getTransactionAccount } from '../wrappers/utils';
-import { waitSeqNoChange } from './utils';
+import { parseAsset, waitSeqNoChange } from './utils';
 import { compileCodes, lpWalletCode } from '../tests/utils';
 import { Factory } from '../wrappers/Factory';
 import { AMM, Asset, DepositLiquidityParams, DepositLiquidityParamsTrimmed, PoolParams } from '../wrappers/types';
 import { VaultNative } from '../wrappers/VaultNative';
+import { VaultExtra } from '../wrappers/VaultExtra';
+import { WalletContractV4 } from '@ton/ton';
 
 enum DepositOrProvide {
     CREATE_LP,
     PROVIDE_LP,
-}
-
-export const NATIVE_ADDRESS = Address.parse('EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c');
-
-function addressToAsset(address: Address) {
-    if (address.toRawString() == NATIVE_ADDRESS.toRawString()) {
-        return null;
-    }
-    return address;
 }
 
 export async function parseInteger(ui: UIProvider, text: string) {
@@ -36,8 +29,8 @@ export async function parseInteger(ui: UIProvider, text: string) {
 async function sendMessage(
     provider: NetworkProvider,
     factory: OpenedContract<Factory>,
-    token1: Address | null,
-    token2: Address | null,
+    token1: Address | null | bigint,
+    token2: Address | null | bigint,
     asset1: bigint,
     amm: AMM,
     ammSettings: Cell | null,
@@ -52,7 +45,6 @@ async function sendMessage(
                 asset1,
                 provider.sender().address!!,
                 new PoolParams(Asset.fromAny(token1), Asset.fromAny(token2), amm),
-                ammSettings,
                 null,
             );
         } else {
@@ -66,7 +58,7 @@ async function sendMessage(
                 ),
             );
         }
-    } else {
+    } else if (token1 instanceof Address) {
         let sender = provider.sender().address as Address;
 
         let wallet = provider.open(
@@ -97,6 +89,33 @@ async function sendMessage(
                 ),
             );
         }
+    } else {
+        let sender = provider.sender();
+
+        // sender.send()
+
+        let vault = provider.open(VaultExtra.createFromAddress(await factory.getVaultAddress(token1)));
+
+        // if (depositOrProvide == DepositOrProvide.CREATE_LP) {
+        //     await vault.sendCreatePoolExtra(
+        //         provider.sender(),
+        //         toNano(0.1) + asset1,
+        //         asset1,
+        //         provider.sender().address!!,
+        //         new PoolParams(Asset.fromAny(token1), Asset.fromAny(token2), amm),
+        //         null,
+        //     );
+        // } else {
+        //     await vault.sendDepositLiquidityExtra(
+        //         provider.sender(),
+        //         toNano(0.1),
+        //         token1,
+        //         new DepositLiquidityParams(
+        //             new DepositLiquidityParamsTrimmed(BigInt((1 << 30) * 2), 0n, null, null, null),
+        //             PoolParams.fromAddress(token1, token2, amm),
+        //         ),
+        //     );
+        // }
     }
 }
 
@@ -126,11 +145,8 @@ export async function run(provider: NetworkProvider) {
             );
             console.log('Known token:', tokens[i], 'address:', tokenMaster.address);
         }
-        console.log('=======================');
-        console.log('Token address for native vault:', NATIVE_ADDRESS.toRawString());
-
-        const tokenForPool1 = addressToAsset(await ui.inputAddress('Insert first token for pool:'));
-        const tokenForPool2 = addressToAsset(await ui.inputAddress('Insert second token for pool:'));
+        let tokenForPool1 = await parseAsset(ui, 'Insert first token for pool');
+        let tokenForPool2 = await parseAsset(ui, 'Insert second token for pool');
         const poolType = await ui.choose('Select pool type', [AMM.CurveFiStable, AMM.ConstantProduct], (x) =>
             AMM[x].toString(),
         );
