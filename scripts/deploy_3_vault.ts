@@ -3,8 +3,7 @@ import {NetworkProvider} from '@ton/blueprint';
 import {JettonMaster} from "../wrappers/Jetton";
 import {compileCodes} from "../tests/utils";
 import {Factory} from "../wrappers/Factory";
-
-export const NATIVE_ADDRESS = Address.parse("EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c");
+import { parseAsset } from './utils';
 
 export async function run(provider: NetworkProvider) {
     let compiled = await compileCodes();

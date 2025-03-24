@@ -5,8 +5,7 @@ import { compileCodes } from '../tests/utils';
 import { Factory } from '../wrappers/Factory';
 import { AMM, Asset, DepositLiquidityParams, DepositLiquidityParamsTrimmed, PoolParams } from '../wrappers/types';
 import { VaultNative } from '../wrappers/VaultNative';
-import { VaultExtra } from '../wrappers/VaultExtra';
-import { WalletContractV4 } from '@ton/ton';
+import { parseAsset } from './utils';
 
 enum DepositOrProvide {
     CREATE_LP,
@@ -87,32 +86,7 @@ async function sendMessage(
             );
         }
     } else {
-        let sender = provider.sender();
-
-        // sender.send()
-
-        let vault = provider.open(VaultExtra.createFromAddress(await factory.getVaultAddress(token1)));
-
-        // if (depositOrProvide == DepositOrProvide.CREATE_LP) {
-        //     await vault.sendCreatePoolExtra(
-        //         provider.sender(),
-        //         toNano(0.1) + asset1,
-        //         asset1,
-        //         provider.sender().address!!,
-        //         new PoolParams(Asset.fromAny(token1), Asset.fromAny(token2), amm),
-        //         null,
-        //     );
-        // } else {
-        //     await vault.sendDepositLiquidityExtra(
-        //         provider.sender(),
-        //         toNano(0.1),
-        //         token1,
-        //         new DepositLiquidityParams(
-        //             new DepositLiquidityParamsTrimmed(BigInt((1 << 30) * 2), 0n, null, null, null),
-        //             PoolParams.fromAddress(token1, token2, amm),
-        //         ),
-        //     );
-        // }
+       // todo implement extra currency support, when it becomes available in Blueprint
     }
 }
 
