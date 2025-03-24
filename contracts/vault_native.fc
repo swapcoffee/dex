@@ -154,6 +154,7 @@ global slice storage::factory_address;
         throw_if(errors::same_assets, equal_slice_bits(asset1, asset2));
         (asset1, asset2, _) = sort_assets(asset1, asset2);
         slice recipient = in_msg_body~load_msg_addr();
+        int use_recipient_on_failure = in_msg_body~load_int(1);
         cell notification_data = in_msg_body~load_maybe_ref();
         int is_active = in_msg_body~load_uint(1);
         cell extra_settings = in_msg_body~load_maybe_ref();
@@ -172,6 +173,7 @@ global slice storage::factory_address;
                 .store_ref(
                     begin_cell()
                         .store_slice(recipient)
+                        .store_int(use_recipient_on_failure, 1)
                         .store_maybe_ref(notification_data)
                         .store_uint(is_active, 1)
                         .store_maybe_ref(extra_settings)

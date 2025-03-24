@@ -26,7 +26,7 @@ X = 4 for administrative actions
 
 ;; pool_params first:Asset second:Asset amm:AMM amm_settings:(Maybe ^Cell) = PoolParams;
     ;; if receiver is none, it equals to tx recipient
-;; public_pool_creation_params recipient:MsgAddressInt notification_data:(Maybe ^Cell) = PublicPoolCreationParams;
+;; public_pool_creation_params recipient:MsgAddressInt use_recipient_on_failure:int1 notification_data:(Maybe ^Cell) = PublicPoolCreationParams;
 ;; private_pool_creation_params is_active:uint1 extra_settings:(Maybe ^Cell) = PrivatePoolCreationParams;
 ;; pool_creation_params public:PublicPoolCreationParams private:PrivatePoolCreationParams = PoolCreationParams;
 ;; notification_data_single receiver:MsgAddressInt fwd_gas:Coins payload:^Cell = NotificationDataSingle;
@@ -39,12 +39,12 @@ X = 4 for administrative actions
 ;; swap_referral_fee referral:MsgAddressInt input_amount:Coins output_amount:Coins = SwapReferralFee;
 ;; swap_fees lp:SwapGenericFee protocol:SwapGenericFee referral:(Maybe ^SwapReferralFee) = SwapFees;
 ;; pool_reserves input_reserve:Coins output_reserve:Coins = PoolReserves;
-;; deposit_liquidity_params_trimmed recipient:MsgAddressInt referral:MsgAddressInt deadline:uint32 condition:DepositLiquidityCondition extra_settings:(Maybe ^Cell) notification_data:(Maybe ^NotificationData) = DepositLiquidityParamsTrimmed;
+;; deposit_liquidity_params_trimmed recipient:MsgAddressInt use_recipient_on_failure:int1 referral:MsgAddressInt deadline:uint32 condition:DepositLiquidityCondition extra_settings:(Maybe ^Cell) notification_data:(Maybe ^NotificationData) = DepositLiquidityParamsTrimmed;
 ;; deposit_liquidity_params params:^DepositLiquidityParamsTrimmed pool_params:^PoolParams = DepositLiquidityParams;
 ;; contract_update code:(Maybe ^Cell) data:(Maybe ^Cell) = ContractUpdate;
 
 ;; The following may be used as a custom_payload within burn operation:
-;; withdraw_liquidity_params deadline:uint32 condition:WithdrawLiquidityCondition extra_settings:(Maybe ^Cell) on_success:(Maybe ^NotificationDataSingle) = WithdrawLiquidityParams;
+;; withdraw_liquidity_params use_recipient_on_failure:int1 deadline:uint32 condition:WithdrawLiquidityCondition extra_settings:(Maybe ^Cell) on_success:(Maybe ^NotificationDataSingle) = WithdrawLiquidityParams;
 
 ;; user -> vault_native
 ;; swap_native#c0ffee00 query_id:uint64 amount:Coins _:SwapStepParams params:^SwapParams = SwapNative;

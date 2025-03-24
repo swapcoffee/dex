@@ -88,6 +88,7 @@ global cell storage::pool_creator_code_cell;
 
         slice creation_params_cs = creation_params.begin_parse();
         creation_params_cs~load_msg_addr(); ;; recipient
+        creation_params_cs~skip_bits(1); ;; use_recipient_on_failure
         creation_params_cs~load_maybe_ref(); ;; notification_data
         int is_active = creation_params_cs~load_uint(1);
         cell extra_settings = creation_params_cs~load_maybe_ref();
@@ -178,6 +179,7 @@ global cell storage::pool_creator_code_cell;
 
         slice creation_params_cs = creation_params.begin_parse();
         slice recipient = creation_params_cs~load_msg_addr();
+        creation_params_cs~skip_bits(1); ;; use_recipient_on_failure
         cell notification_data = creation_params_cs~load_maybe_ref();
         int is_active = creation_params_cs~load_uint(1);
         cell extra_settings = creation_params_cs~load_maybe_ref();
