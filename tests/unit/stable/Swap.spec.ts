@@ -5,7 +5,7 @@ import {compile} from "@ton/blueprint";
 import {StableWrapper} from "../../../wrappers/unit/StableWrapper";
 import fs from 'node:fs';
 
-xdescribe('Test', () => {
+describe('Test', () => {
     let stableWrapperCode: Cell
     beforeAll(async () => {
         stableWrapperCode = await compile("unit/StableWrapper");
@@ -25,7 +25,7 @@ xdescribe('Test', () => {
     });
 
     it('tests swap, all invariants from Vyper code', async () => {
-        let data = fs.readFileSync('tests/data/stable_trade2.txt', 'utf-8');
+        let data = fs.readFileSync('tests/data/stable_swap_generated_data_for_test.txt', 'utf-8');
         let items = data.split("\n");
         let knownMap: { [id: string]: boolean } = {};
         let itemsToIterate = [];

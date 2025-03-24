@@ -34,7 +34,7 @@ global int storage::asset_id;
 
 int get_extra_currency_amount(cell extra_currencies) inline {
     (slice cs, _) = extra_currencies.udict_get?(32, storage::asset_id);
-    return cs~load_coins();
+    return cs~load_extra();
 }
 
 () recv_internal(cell in_msg_full, slice in_msg_body) impure {
