@@ -8,13 +8,13 @@ import { AMM, PoolParams } from '../wrappers/types';
 import {CodeCells, compileCodes} from "./utils";
 import {AccountStateActive} from "@ton/core/src/types/AccountState";
 import {PoolCreator} from "../wrappers/PoolCreator";
-import { deployJettonWithVault, deployNativeVault, JettonDataWithVault } from './helpers';
+import { DEFAULT_TIMEOUT, deployJettonWithVault, deployNativeVault, JettonDataWithVault } from './helpers';
 
 describe('Test', () => {
     let codeCells: CodeCells;
     beforeAll(async () => {
         codeCells = await compileCodes();
-    });
+    }, DEFAULT_TIMEOUT);
 
     let blockchain: Blockchain;
     let admin: SandboxContract<TreasuryContract>;
@@ -49,7 +49,7 @@ describe('Test', () => {
             'TST2'
         )
         nativeVault = await deployNativeVault(blockchain, factory, admin)
-    });
+    }, DEFAULT_TIMEOUT);
 
     it('pool_creator jetton+jetton created/destroyed, admin', async () => {
         let jettonWallet1Admin = blockchain.openContract(

@@ -4,33 +4,31 @@ import '@ton/test-utils';
 import {compile} from "@ton/blueprint";
 import {StableWrapper} from "../../../wrappers/unit/StableWrapper";
 import fs from 'node:fs';
+import { DEFAULT_TIMEOUT, LiquidityAdditionData, prepareMultiLiquidityAdditionCells } from '../../helpers';
 
-xdescribe('Test', () => {
+describe('Test', () => {
     let stableWrapperCode: Cell
-    beforeAll(async () => {
-        stableWrapperCode = await compile("unit/StableWrapper");
-    });
-
     let blockchain: Blockchain;
     let admin: SandboxContract<TreasuryContract>;
     let stableWrapper: SandboxContract<StableWrapper>;
 
     beforeEach(async () => {
+        stableWrapperCode = await compile("unit/StableWrapper");
         blockchain = await Blockchain.create();
         admin = await blockchain.treasury('admin', {balance: toNano(10.0)});
         stableWrapper = blockchain.openContract(
             StableWrapper.createFromConfig(stableWrapperCode)
         );
         await stableWrapper.sendDeploy(admin.getSender(), toNano(1.0));
-    });
+    }, DEFAULT_TIMEOUT);
 
-    it('tests second deposit, all invariants from Vyper code', async () => {
-        let data = fs.readFileSync('tests/data//second_deposit_lp2.txt', 'utf-8');
+    it('second deposit, all invariants from Vyper code', async () => {
+        let data = fs.readFileSync('tests/data/stable_second_deposit_generated_data_for_test.txt', 'utf-8');
         let items = data.split("\n");
         let knownMap: {[id: string]: boolean} = {};
         let itemsToIterate = [];
         for (let i = 0; i < items.length; i++) {
-            if(items[i] in knownMap) {
+            if (items[i] in knownMap) {
                 continue;
             }
             knownMap[items[i]] = true;
@@ -38,38 +36,40 @@ xdescribe('Test', () => {
         }
         console.log("items:", items.length, "unique:", itemsToIterate.length);
 
+        const amm_settings = beginCell().storeUint(2_000, 16).storeCoins(1).storeCoins(1).endCell();
+        const entries: LiquidityAdditionData[] = [];
         for (let i = 0; i < itemsToIterate.length; i++) {
-
             let params = parseString(itemsToIterate[i]);
             if (params.length != 6) {
                 continue;
             }
-
             let reserve1 = params[0];
             let reserve2 = params[1];
-
-            let initLp = await stableWrapper.getAddLiquidity(0n,
-                reserve1, reserve2, 0n, 0n,
-                beginCell().storeUint(2_000, 16).storeCoins(1).storeCoins(1).endCell());
-
-            let add1 = params[2];
-            let add2 = params[3];
-
+            let amount1 = params[2];
+            let amount2 = params[3];
             let finalLp = params[4];
-            let ok = params[5];
 
-            let res = await stableWrapper.getAddLiquidity(initLp.lp,
-                add1, add2, reserve1, reserve2,
-                beginCell().storeUint(2_000, 16).storeCoins(1).storeCoins(1).endCell());
-            if (ok == 1n) {
-                expect(res.lp).toBe(finalLp);
+            let expected_lp_amount: bigint;
+            if (params[5] === 1n) {
+                expected_lp_amount = finalLp;
             } else {
-                expect(res.lp).toBe(0n);
+                expected_lp_amount = -1n;
             }
-
-            if (i % 10_000 == 0) {
-                console.log(i + "/" + itemsToIterate.length)
-            }
+            entries.push({
+                total_supply: 0n,
+                reserve1,
+                reserve2,
+                amount1,
+                amount2,
+                expected_lp_amount
+            })
+        }
+        const cells = prepareMultiLiquidityAdditionCells(entries)
+        console.log('cells:', cells.length)
+        let handled = 0
+        for (const cellWithData of cells) {
+            await stableWrapper.checkMultiLiquidityAdditions(blockchain, cellWithData, amm_settings, true)
+            console.log('handled', ++handled, 'out of', cells.length)
         }
     });
 

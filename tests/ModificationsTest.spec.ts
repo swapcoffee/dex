@@ -8,7 +8,13 @@ import {CodeCells, compileCodes} from "./utils";
 import {compile} from "@ton/blueprint";
 import {printTransactions} from "../wrappers/utils";
 import {TestContract} from "../wrappers/unit/TestContract";
-import { deployExtraVault, deployJettonWithVault, deployNativeVault, JettonDataWithVault } from './helpers';
+import {
+    DEFAULT_TIMEOUT,
+    deployExtraVault,
+    deployJettonWithVault,
+    deployNativeVault,
+    JettonDataWithVault
+} from './helpers';
 import { VaultExtra } from '../wrappers/VaultExtra';
 
 describe('Test', () => {
@@ -17,7 +23,7 @@ describe('Test', () => {
     beforeAll(async () => {
         codeCells = await compileCodes();
         testContractCode = await compile("unit/TestContract");
-    });
+    }, DEFAULT_TIMEOUT);
 
     let blockchain: Blockchain;
     let admin: SandboxContract<TreasuryContract>;
@@ -132,7 +138,7 @@ describe('Test', () => {
             )
         }
 
-    });
+    }, DEFAULT_TIMEOUT);
 
     it('factory update admin, by non admin, fail', async () => {
         let txs = await factory.sendUpdateAdmin(user.getSender(), toNano(1), null)

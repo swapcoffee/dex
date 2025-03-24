@@ -17,7 +17,7 @@ import {AccountStateActive} from "@ton/core/src/types/AccountState";
 import {printTransactions} from "../wrappers/utils";
 import {VaultExtra} from "../wrappers/VaultExtra";
 import {PoolJettonBased} from "../wrappers/PoolJettonBased";
-import { deployJettonWithVault, deployNativeVault, JettonDataWithVault } from './helpers';
+import { DEFAULT_TIMEOUT, deployJettonWithVault, deployNativeVault, JettonDataWithVault } from './helpers';
 
 enum VaultTypes {
     NATIVE_VAULT,
@@ -152,7 +152,7 @@ describe('Test', () => {
     let codeCells: CodeCells;
     beforeAll(async () => {
         codeCells = await compileCodes();
-    });
+    }, DEFAULT_TIMEOUT);
 
     let blockchain: Blockchain;
     let admin: SandboxContract<TreasuryContract>;
@@ -209,7 +209,7 @@ describe('Test', () => {
             user.address,
             toNano(50.0)
         )
-    });
+    }, DEFAULT_TIMEOUT);
 
     test.each([
         [VaultTypes.NATIVE_VAULT, VaultTypes.JETTON_VAULT_1],

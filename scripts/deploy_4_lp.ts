@@ -5,19 +5,11 @@ import { compileCodes } from '../tests/utils';
 import { Factory } from '../wrappers/Factory';
 import { AMM, Asset, DepositLiquidityParams, DepositLiquidityParamsTrimmed, PoolParams } from '../wrappers/types';
 import { VaultNative } from '../wrappers/VaultNative';
+import { parseAsset } from './utils';
 
 enum DepositOrProvide {
     CREATE_LP,
     PROVIDE_LP,
-}
-
-export const NATIVE_ADDRESS = Address.parse('EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c');
-
-function addressToAsset(address: Address) {
-    if (address.toRawString() == NATIVE_ADDRESS.toRawString()) {
-        return null;
-    }
-    return address;
 }
 
 export async function parseInteger(ui: UIProvider, text: string) {
@@ -33,8 +25,8 @@ export async function parseInteger(ui: UIProvider, text: string) {
 async function sendMessage(
     provider: NetworkProvider,
     factory: OpenedContract<Factory>,
-    token1: Address | null,
-    token2: Address | null,
+    token1: Address | null | bigint,
+    token2: Address | null | bigint,
     asset1: bigint,
     amm: AMM,
     ammSettings: Cell | null,
@@ -62,7 +54,7 @@ async function sendMessage(
                 ),
             );
         }
-    } else {
+    } else if (token1 instanceof Address) {
         let sender = provider.sender().address as Address;
 
         let wallet = provider.open(
@@ -93,6 +85,8 @@ async function sendMessage(
                 ),
             );
         }
+    } else {
+       // todo implement extra currency support, when it becomes available in Blueprint
     }
 }
 
@@ -122,11 +116,8 @@ export async function run(provider: NetworkProvider) {
             );
             console.log('Known token:', tokens[i], 'address:', tokenMaster.address);
         }
-        console.log('=======================');
-        console.log('Token address for native vault:', NATIVE_ADDRESS.toRawString());
-
-        const tokenForPool1 = addressToAsset(await ui.inputAddress('Insert first token for pool:'));
-        const tokenForPool2 = addressToAsset(await ui.inputAddress('Insert second token for pool:'));
+        let tokenForPool1 = await parseAsset(ui, 'Insert first token for pool');
+        let tokenForPool2 = await parseAsset(ui, 'Insert second token for pool');
         const poolType = await ui.choose('Select pool type', [AMM.CurveFiStable, AMM.ConstantProduct], (x) =>
             AMM[x].toString(),
         );

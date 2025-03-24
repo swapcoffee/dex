@@ -1,5 +1,17 @@
-import {Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode} from '@ton/core';
-import {DepositLiquidityParams, NotificationData, PoolParams, SwapParams, SwapStepParams} from "../types";
+import {
+    Address,
+    beginCell,
+    Cell,
+    Contract,
+    contractAddress,
+    ContractProvider,
+    Sender,
+    SendMode,
+    TupleReader
+} from '@ton/core';
+import { CellWithLiquidityAdditionData, CellWithSwapData } from '../../tests/helpers';
+import * as util from 'node:util';
+import { Blockchain } from '@ton/sandbox';
 
 export class StableWrapper implements Contract {
     constructor(readonly address: Address, readonly init?: { code: Cell; data: Cell }) {
@@ -50,22 +62,46 @@ export class StableWrapper implements Contract {
         }
     }
 
-    async getSwap(provider: ContractProvider,
-                  input_amount: bigint,
-                  reserve1: bigint,
-                  reserve2: bigint,
-                  direction: bigint,
-                  amm_settings: Cell
+    async checkMultiSwaps(
+        blockchain: Blockchain,
+        cellWithData: CellWithSwapData,
+        ammSettings: Cell
     ) {
-        let res = await provider.get("get_swap_stable", [
-            {type: 'int', value: input_amount},
-            {type: 'int', value: reserve1},
-            {type: 'int', value: reserve2},
-            {type: 'int', value: direction},
-            {type: 'cell', cell: amm_settings}
-        ]);
-        return {
-            amountOut: res.stack.readBigNumber()
+        const res = await blockchain.runGetMethod(
+            this.address,
+            'get_check_swaps_stable',
+            [{type: 'cell', cell: cellWithData.cell}, {type: 'cell', cell: ammSettings}],
+            {gasLimit: 100_000_000n}
+        )
+        const failedIndex = new TupleReader(res.stack).readBigNumber()
+        if (failedIndex !== -1n) {
+            const failedData = cellWithData.swap_data[Number(failedIndex)]
+            throw new Error(util.format('Failed swap data: %s', failedData))
+        }
+    }
+
+    async checkMultiLiquidityAdditions(
+        blockchain: Blockchain,
+        cellWithData: CellWithLiquidityAdditionData,
+        ammSettings: Cell,
+        secondDeposit: boolean
+    ) {
+        let methodName: string
+        if (secondDeposit) {
+            methodName = 'get_check_liquidity_addition_stable2'
+        } else {
+            methodName = 'get_check_liquidity_addition_stable'
+        }
+        const res = await blockchain.runGetMethod(
+            this.address,
+            methodName,
+            [{type: 'cell', cell: cellWithData.cell}, {type: 'cell', cell: ammSettings}],
+            {gasLimit: 100_000_000n}
+        )
+        const failedIndex = new TupleReader(res.stack).readBigNumber()
+        if (failedIndex !== -1n) {
+            const failedData = cellWithData.liquidity_addition_data[Number(failedIndex)]
+            throw new Error(util.format('Failed liquidity addition data: %s', failedData))
         }
     }
 

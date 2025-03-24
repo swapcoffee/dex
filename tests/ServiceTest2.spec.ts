@@ -15,13 +15,13 @@ import {
 } from "../wrappers/types";
 import {VaultExtra} from "../wrappers/VaultExtra";
 import {printTransactions} from "../wrappers/utils";
-import { deployJettonWithVault, deployNativeVault, JettonDataWithVault } from './helpers';
+import { DEFAULT_TIMEOUT, deployJettonWithVault, deployNativeVault, JettonDataWithVault } from './helpers';
 
 describe('Test', () => {
     let codeCells: CodeCells;
     beforeAll(async () => {
         codeCells = await compileCodes();
-    });
+    }, DEFAULT_TIMEOUT);
 
     let blockchain: Blockchain;
     let admin: SandboxContract<TreasuryContract>;

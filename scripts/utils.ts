@@ -80,6 +80,26 @@ export async function parseInteger(ui: UIProvider, text: string) {
     }
 }
 
+export async function parseAsset(ui: UIProvider, text: string) {
+    console.log("=======================")
+    console.log("Enter 'native' for native vault");
+    console.log("Enter number for external currency vault");
+    console.log("Enter jetton master address for toke vault");
+    while (true) {
+        let data = await ui.input(text);
+        if (data.toUpperCase() === 'NATIVE') {
+            return null;
+        }
+        try {
+            return BigInt(Number.parseInt(data));
+        } catch (Error) {
+            try {
+                return Address.parse(data);
+            } catch (Error) {}
+        }
+    }
+}
+
 export async function getAddress(contractAddress: Address, provider: NetworkProvider, returnMaster=false) {
     const ui = provider.ui();
     while (true) {

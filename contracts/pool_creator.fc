@@ -42,6 +42,7 @@ global int storage::amount2;
             .store_uint(query_id, 64)
             .store_coins(storage::amount1)
             .store_coins(storage::amount2)
+            .store_slice(storage::owner_address)
             .store_ref(creation_params)
             .store_ref(storage::init_data_cell),
         SEND_MODE_SELF_DESTROY

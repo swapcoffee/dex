@@ -174,12 +174,13 @@ global cell storage::pool_creator_code_cell;
     } elseif (opcode == opcodes::create_pool_request) {
         int amount1 = in_msg_body~load_coins();
         int amount2 = in_msg_body~load_coins();
+        slice tx_initiator = in_msg_body~load_msg_addr();
         cell creation_params = in_msg_body~load_ref();
         cell proof = in_msg_body~load_ref();
 
         slice creation_params_cs = creation_params.begin_parse();
         slice recipient = creation_params_cs~load_msg_addr();
-        creation_params_cs~skip_bits(1); ;; use_recipient_on_failure
+        int use_recipient_on_failure = creation_params_cs~load_int(1);
         cell notification_data = creation_params_cs~load_maybe_ref();
         int is_active = creation_params_cs~load_uint(1);
         cell extra_settings = creation_params_cs~load_maybe_ref();
@@ -221,7 +222,9 @@ global cell storage::pool_creator_code_cell;
                         .store_uint(query_id, 64)
                         .store_coins(amount1)
                         .store_coins(amount2)
+                        .store_slice(tx_initiator)
                         .store_slice(recipient)
+                        .store_int(use_recipient_on_failure, 1)
                         .store_maybe_ref(extra_settings)
                         .store_maybe_ref(notification_data)
                         .end_cell()

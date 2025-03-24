@@ -1,25 +1,19 @@
 // noinspection JSUnusedGlobalSymbols
 
-import {
-    Address,
-    beginCell,
-    Builder,
-    Cell, Slice
-} from '@ton/core';
+import { Address, beginCell, Builder, Cell, Slice } from '@ton/core';
 
 export enum AMM {
     ConstantProduct,
-    CurveFiStable
+    CurveFiStable,
 }
 
 export enum FailReason {
     SlippageTolerated,
     DeadlineReached,
-    AlreadyExists
+    AlreadyExists,
 }
 
 export abstract class CellSerializable {
-
     public abstract write(b: Builder): void;
 
     public toCell(): Cell {
@@ -27,40 +21,36 @@ export abstract class CellSerializable {
         this.write(b);
         return b.endCell();
     }
-
 }
 
 export abstract class Asset extends CellSerializable {
-
     static fromSlice(slice: Slice): Asset {
-        const type = slice.loadUint(2)
+        const type = slice.loadUint(2);
         if (type === 0) {
-            return AssetNative.INSTANCE
+            return AssetNative.INSTANCE;
         } else if (type === 1) {
-            return new AssetJetton(slice.loadUintBig(8), slice.loadUintBig(256))
+            return new AssetJetton(slice.loadUintBig(8), slice.loadUintBig(256));
         } else if (type === 2) {
-            return new AssetExtra(slice.loadUintBig(32))
+            return new AssetExtra(slice.loadUintBig(32));
         } else {
-            throw new Error("unexpected asset type")
+            throw new Error('unexpected asset type');
         }
     }
 
     static fromAny(value: any): Asset {
         if (value == null) {
-            return AssetNative.INSTANCE
+            return AssetNative.INSTANCE;
         } else if (value instanceof Address) {
             return AssetJetton.fromAddress(value);
-        } else if (typeof value === "bigint") {
-            return new AssetExtra(value)
+        } else if (typeof value === 'bigint') {
+            return new AssetExtra(value);
         } else {
-            throw new Error("unexpected asset type")
+            throw new Error('unexpected asset type');
         }
     }
-
 }
 
 export class AssetNative extends Asset {
-
     static INSTANCE = new AssetNative();
 
     private constructor() {
@@ -73,10 +63,9 @@ export class AssetNative extends Asset {
 }
 
 export class AssetJetton extends Asset {
-
     constructor(
         public chain: bigint,
-        public hash: bigint
+        public hash: bigint,
     ) {
         super();
     }
@@ -84,27 +73,22 @@ export class AssetJetton extends Asset {
     static fromAddress(address: Address): AssetJetton {
         return new AssetJetton(
             BigInt(address.workChain),
-            beginCell().storeBuffer(address.hash).endCell().beginParse().loadUintBig(256)
+            beginCell().storeBuffer(address.hash).endCell().beginParse().loadUintBig(256),
         );
     }
 
     public write(b: Builder): void {
-        b.storeUint(1, 2)
-            .storeUint(this.chain, 8)
-            .storeUint(this.hash, 256);
+        b.storeUint(1, 2).storeUint(this.chain, 8).storeUint(this.hash, 256);
     }
 }
 
 export class AssetExtra extends Asset {
-    constructor(
-        public id: bigint
-    ) {
+    constructor(public id: bigint) {
         super();
     }
 
     public write(b: Builder): void {
-        b.storeUint(2, 2)
-            .storeUint(this.id, 32);
+        b.storeUint(2, 2).storeUint(this.id, 32);
     }
 }
 
@@ -113,17 +97,30 @@ export class PoolParams extends CellSerializable {
         public first_asset: Asset,
         public second_asset: Asset,
         public amm: AMM,
-        public ammSettings: Cell | null = null
+        public ammSettings: Cell | null = null,
     ) {
-        super()
+        super();
     }
 
-    static fromAddress(first_asset: Address | null, second_asset: Address | null, amm: AMM, ammSettings: Cell | null = null): PoolParams {
+    static fromAddress(
+        first_asset: Address | null | bigint,
+        second_asset: Address | null | bigint,
+        amm: AMM,
+        ammSettings: Cell | null = null,
+    ): PoolParams {
         return new PoolParams(
-            first_asset === null ? AssetNative.INSTANCE : AssetJetton.fromAddress(first_asset),
-            second_asset === null ? AssetNative.INSTANCE : AssetJetton.fromAddress(second_asset),
+            first_asset === null
+                ? AssetNative.INSTANCE
+                : typeof first_asset === 'bigint'
+                  ? AssetExtra.fromAny(first_asset)
+                  : AssetJetton.fromAddress(first_asset),
+            second_asset === null
+                ? AssetNative.INSTANCE
+                : typeof second_asset === 'bigint'
+                  ? AssetExtra.fromAny(second_asset)
+                  : AssetJetton.fromAddress(second_asset),
             amm,
-            ammSettings
+            ammSettings,
         );
     }
 
@@ -131,7 +128,7 @@ export class PoolParams extends CellSerializable {
         this.first_asset.write(b);
         this.second_asset.write(b);
         b.storeUint(this.amm, 3);
-        b.storeMaybeRef(this.ammSettings)
+        b.storeMaybeRef(this.ammSettings);
     }
 }
 
@@ -139,38 +136,38 @@ export class PublicPoolCreationParams extends CellSerializable {
     constructor(
         public recipient: Address,
         public use_recipient_on_failure: boolean = false,
-        public notification_data: NotificationData | null = null
+        public notification_data: NotificationData | null = null,
     ) {
-        super()
+        super();
     }
 
     public write(b: Builder): void {
-        b.storeAddress(this.recipient)
+        b.storeAddress(this.recipient);
         b.storeBit(this.use_recipient_on_failure);
-        b.storeMaybeRef(this.notification_data?.toCell())
+        b.storeMaybeRef(this.notification_data?.toCell());
     }
 }
 
 export class PrivatePoolCreationParams extends CellSerializable {
     constructor(
         public is_active: boolean = true,
-        public extra_settings: Cell | null = null
+        public extra_settings: Cell | null = null,
     ) {
-        super()
+        super();
     }
 
     public write(b: Builder): void {
-        b.storeUint(this.is_active ? 1 : 0, 1)
-        b.storeMaybeRef(this.extra_settings)
+        b.storeUint(this.is_active ? 1 : 0, 1);
+        b.storeMaybeRef(this.extra_settings);
     }
 }
 
 export class PoolCreationParams extends CellSerializable {
     constructor(
         public pub: PublicPoolCreationParams,
-        public priv: PrivatePoolCreationParams = new PrivatePoolCreationParams()
+        public priv: PrivatePoolCreationParams = new PrivatePoolCreationParams(),
     ) {
-        super()
+        super();
     }
 
     public write(b: Builder): void {
@@ -183,41 +180,36 @@ export class NotificationDataSingle extends CellSerializable {
     constructor(
         public receiver: Address | null,
         public fwd_gas: bigint,
-        public payload: Cell
+        public payload: Cell,
     ) {
-        super()
+        super();
     }
 
     public write(b: Builder): void {
-        b.storeAddress(this.receiver)
-            .storeCoins(this.fwd_gas)
-            .storeRef(this.payload)
+        b.storeAddress(this.receiver).storeCoins(this.fwd_gas).storeRef(this.payload);
     }
 }
 
 export class NotificationData extends CellSerializable {
     constructor(
         public on_success: NotificationDataSingle | null,
-        public on_failure: NotificationDataSingle | null
+        public on_failure: NotificationDataSingle | null,
     ) {
-        super()
+        super();
     }
 
     public write(b: Builder): void {
-        b.storeMaybeRef(this.on_success?.toCell())
-            .storeMaybeRef(this.on_failure?.toCell())
+        b.storeMaybeRef(this.on_success?.toCell()).storeMaybeRef(this.on_failure?.toCell());
     }
 }
 
 export class Fee extends CellSerializable {
-    constructor(
-        public nominator: bigint
-    ) {
-        super()
+    constructor(public nominator: bigint) {
+        super();
     }
 
     public write(b: Builder): void {
-        b.storeUint(this.nominator, 16)
+        b.storeUint(this.nominator, 16);
     }
 }
 
@@ -226,9 +218,9 @@ export class Fees extends CellSerializable {
         public input: Fee | null,
         public output: Fee | null,
         public first: Fee | null,
-        public second: Fee | null
+        public second: Fee | null,
     ) {
-        super()
+        super();
     }
 
     public write(b: Builder): void {
@@ -261,7 +253,7 @@ export class PoolUpdateParams extends CellSerializable {
         public lp_fees: Fees | null,
         public is_active: boolean | null,
     ) {
-        super()
+        super();
     }
 
     public write(b: Builder): void {
@@ -297,9 +289,9 @@ export class SwapParams extends CellSerializable {
         public deadline: bigint,
         public recipient: Address | null,
         public referral: Address | null,
-        public notification_data: NotificationData | null
+        public notification_data: NotificationData | null,
     ) {
-        super()
+        super();
     }
 
     public write(b: Builder): void {
@@ -314,43 +306,39 @@ export class SwapStepParams extends CellSerializable {
     constructor(
         public pool_address_hash: bigint,
         public min_output_amount: bigint,
-        public next: SwapStepParams | null
+        public next: SwapStepParams | null,
     ) {
-        super()
+        super();
     }
 
     public write(b: Builder): void {
-        b.storeUint(this.pool_address_hash, 256)
-            .storeCoins(this.min_output_amount)
-            .storeMaybeRef(this.next?.toCell());
+        b.storeUint(this.pool_address_hash, 256).storeCoins(this.min_output_amount).storeMaybeRef(this.next?.toCell());
     }
 }
 
 export class SwapStepParamsTrimmed extends CellSerializable {
     constructor(
         public min_output_amount: bigint,
-        public next: SwapStepParams | null
+        public next: SwapStepParams | null,
     ) {
-        super()
+        super();
     }
 
     public write(b: Builder): void {
-        b.storeCoins(this.min_output_amount)
-            .storeMaybeRef(this.next?.toCell());
+        b.storeCoins(this.min_output_amount).storeMaybeRef(this.next?.toCell());
     }
 }
 
 export class SwapGenericFee extends CellSerializable {
     constructor(
         public input_amount: bigint,
-        public output_amount: bigint
+        public output_amount: bigint,
     ) {
-        super()
+        super();
     }
 
     public write(b: Builder): void {
-        b.storeCoins(this.input_amount)
-            .storeCoins(this.output_amount);
+        b.storeCoins(this.input_amount).storeCoins(this.output_amount);
     }
 }
 
@@ -358,15 +346,13 @@ export class SwapReferralFee extends CellSerializable {
     constructor(
         public referral: Address | null,
         public input_amount: bigint,
-        public output_amount: bigint
+        public output_amount: bigint,
     ) {
-        super()
+        super();
     }
 
     public write(b: Builder): void {
-        b.storeAddress(this.referral)
-            .storeCoins(this.input_amount)
-            .storeCoins(this.output_amount);
+        b.storeAddress(this.referral).storeCoins(this.input_amount).storeCoins(this.output_amount);
     }
 }
 
@@ -374,9 +360,9 @@ export class SwapFees extends CellSerializable {
     constructor(
         public lp: SwapGenericFee,
         public protocol: SwapGenericFee,
-        public referral: SwapReferralFee | null
+        public referral: SwapReferralFee | null,
     ) {
-        super()
+        super();
     }
 
     public write(b: Builder): void {
@@ -389,23 +375,22 @@ export class SwapFees extends CellSerializable {
 export class PoolReserves extends CellSerializable {
     constructor(
         public input_reserve: bigint,
-        public output_reserve: bigint
+        public output_reserve: bigint,
     ) {
-        super()
+        super();
     }
 
     public write(b: Builder): void {
-        b.storeCoins(this.input_reserve)
-            .storeCoins(this.output_reserve);
+        b.storeCoins(this.input_reserve).storeCoins(this.output_reserve);
     }
 }
 
 export class ChangedPoolReserves extends CellSerializable {
     constructor(
         public before: PoolReserves,
-        public after: PoolReserves
+        public after: PoolReserves,
     ) {
-        super()
+        super();
     }
 
     public write(b: Builder): void {
@@ -423,7 +408,7 @@ export class DepositLiquidityParamsTrimmed extends CellSerializable {
         public notification_data: NotificationData | null,
         public use_recipient_on_failure: boolean = false
     ) {
-        super()
+        super();
     }
 
     public write(b: Builder): void {
@@ -441,13 +426,12 @@ export class DepositLiquidityParamsTrimmed extends CellSerializable {
 export class DepositLiquidityParams extends CellSerializable {
     constructor(
         public params: DepositLiquidityParamsTrimmed,
-        public pool_params: PoolParams
+        public pool_params: PoolParams,
     ) {
-        super()
+        super();
     }
 
     public write(b: Builder): void {
-        b.storeRef(this.params.toCell())
-            .storeRef(this.pool_params.toCell());
+        b.storeRef(this.params.toCell()).storeRef(this.pool_params.toCell());
     }
 }

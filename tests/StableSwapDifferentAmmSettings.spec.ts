@@ -14,13 +14,13 @@ import {
     PoolParams, SwapParams, SwapStepParams
 } from "../wrappers/types";
 import {VaultExtra} from "../wrappers/VaultExtra";
-import { deployJettonWithVault, deployNativeVault, JettonDataWithVault } from './helpers';
+import { DEFAULT_TIMEOUT, deployJettonWithVault, deployNativeVault, JettonDataWithVault } from './helpers';
 
 describe('Test', () => {
     let codeCells: CodeCells;
     beforeAll(async () => {
         codeCells = await compileCodes();
-    });
+    }, DEFAULT_TIMEOUT);
 
     let blockchain: Blockchain;
     let admin: SandboxContract<TreasuryContract>;

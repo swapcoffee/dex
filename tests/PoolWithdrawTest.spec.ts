@@ -17,7 +17,7 @@ import {BlockchainTransaction} from "@ton/sandbox/dist/blockchain/Blockchain";
 import {VaultExtra} from "../wrappers/VaultExtra";
 import {printTransactions} from "../wrappers/utils";
 import {PoolJettonBased} from "../wrappers/PoolJettonBased";
-import { deployJettonWithVault, deployNativeVault, JettonDataWithVault } from './helpers';
+import { DEFAULT_TIMEOUT, deployJettonWithVault, deployNativeVault, JettonDataWithVault } from './helpers';
 
 
 enum VaultTypes {
@@ -208,7 +208,7 @@ describe('Test', () => {
     let codeCells: CodeCells;
     beforeAll(async () => {
         codeCells = await compileCodes();
-    });
+    }, DEFAULT_TIMEOUT);
 
     let blockchain: Blockchain;
     let admin: SandboxContract<TreasuryContract>;
@@ -265,7 +265,7 @@ describe('Test', () => {
             user.address,
             toNano(50.0)
         )
-    });
+    }, DEFAULT_TIMEOUT);
 
     test.each(testArguments)
     ('empty pool, failed to withdraw liq, no wallet, %i, %i', async (t1, t2) => {
