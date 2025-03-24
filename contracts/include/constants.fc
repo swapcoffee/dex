@@ -26,7 +26,7 @@ X = 4 for administrative actions
 
 ;; pool_params first:Asset second:Asset amm:AMM amm_settings:(Maybe ^Cell) = PoolParams;
     ;; if receiver is none, it equals to tx recipient
-;; public_pool_creation_params recipient:MsgAddressInt notification_data:(Maybe ^Cell) = PublicPoolCreationParams;
+;; public_pool_creation_params recipient:MsgAddressInt use_recipient_on_failure:int1 notification_data:(Maybe ^Cell) = PublicPoolCreationParams;
 ;; private_pool_creation_params is_active:uint1 extra_settings:(Maybe ^Cell) = PrivatePoolCreationParams;
 ;; pool_creation_params public:PublicPoolCreationParams private:PrivatePoolCreationParams = PoolCreationParams;
 ;; notification_data_single receiver:MsgAddressInt fwd_gas:Coins payload:^Cell = NotificationDataSingle;
@@ -39,12 +39,12 @@ X = 4 for administrative actions
 ;; swap_referral_fee referral:MsgAddressInt input_amount:Coins output_amount:Coins = SwapReferralFee;
 ;; swap_fees lp:SwapGenericFee protocol:SwapGenericFee referral:(Maybe ^SwapReferralFee) = SwapFees;
 ;; pool_reserves input_reserve:Coins output_reserve:Coins = PoolReserves;
-;; deposit_liquidity_params_trimmed recipient:MsgAddressInt referral:MsgAddressInt deadline:uint32 condition:DepositLiquidityCondition extra_settings:(Maybe ^Cell) notification_data:(Maybe ^NotificationData) = DepositLiquidityParamsTrimmed;
+;; deposit_liquidity_params_trimmed recipient:MsgAddressInt use_recipient_on_failure:int1 referral:MsgAddressInt deadline:uint32 condition:DepositLiquidityCondition extra_settings:(Maybe ^Cell) notification_data:(Maybe ^NotificationData) = DepositLiquidityParamsTrimmed;
 ;; deposit_liquidity_params params:^DepositLiquidityParamsTrimmed pool_params:^PoolParams = DepositLiquidityParams;
 ;; contract_update code:(Maybe ^Cell) data:(Maybe ^Cell) = ContractUpdate;
 
 ;; The following may be used as a custom_payload within burn operation:
-;; withdraw_liquidity_params deadline:uint32 condition:WithdrawLiquidityCondition extra_settings:(Maybe ^Cell) on_success:(Maybe ^NotificationDataSingle) = WithdrawLiquidityParams;
+;; withdraw_liquidity_params use_recipient_on_failure:int1 deadline:uint32 condition:WithdrawLiquidityCondition extra_settings:(Maybe ^Cell) on_success:(Maybe ^NotificationDataSingle) = WithdrawLiquidityParams;
 
 ;; user -> vault_native
 ;; swap_native#c0ffee00 query_id:uint64 amount:Coins _:SwapStepParams params:^SwapParams = SwapNative;
@@ -89,10 +89,10 @@ const int opcodes::create_pool_creator_request = 0xc0ffee23;
 ;; create_pool_creator_internal#c0ffee24 query_id:uint64 asset:Asset amount:Coins creation_params:^PoolCreationParams = CreatePoolCreatorInternal;
 const int opcodes::create_pool_creator_internal = 0xc0ffee24;
 ;; pool_creator -> factory
-;; create_pool_request#c0ffee25 query_id:uint64 amount1:Coins amount2:Coins creation_params:^PoolCreationParams proof:^Cell = CreatePoolRequest;
+;; create_pool_request#c0ffee25 query_id:uint64 amount1:Coins amount2:Coins tx_initiator:MsgAddressInt creation_params:^PoolCreationParams proof:^Cell = CreatePoolRequest;
 const int opcodes::create_pool_request = 0xc0ffee25;
 ;; factory -> pool
-;; create_pool_internal#c0ffee26 query_id:uint64 amount1:Coins amount2:Coins recipient:MsgAddressInt extra_settings:(Maybe ^Cell) notification_data:(Maybe ^NotificationData) = CreatePoolInternal;
+;; create_pool_internal#c0ffee26 query_id:uint64 amount1:Coins amount2:Coins tx_initiator:MsgAddressInt recipient:MsgAddressInt use_recipient_on_failure:int1 extra_settings:(Maybe ^Cell) notification_data:(Maybe ^NotificationData) = CreatePoolInternal;
 const int opcodes::create_pool_internal = 0xc0ffee26;
 ;; user -> vault_native
 ;; deposit_liquidity_native#c0ffee04 query_id:uint64 input_amount:Coins params:DepositLiquidityParams = DepositLiquidityNative;
@@ -110,7 +110,7 @@ const int opcodes::create_liquidity_depository_request = 0xc0ffee27;
 ;; create_liquidity_depository_internal#c0ffee28 query_id:uint64 asset:Asset amount:Coins params:^DepositLiquidityParamsTrimmed = CreateLiquidityDepositoryInternal;
 const int opcodes::create_liquidity_depository_internal = 0xc0ffee28;
 ;; liquidity_depository -> pool
-;; deposit_liquidity_internal#c0ffee29 query_id:uint64 amount1:Coins amount2:Coins params:^DepositLiquidityParamsTrimmed proof:^Cell = DepositLiquidityInternal;
+;; deposit_liquidity_internal#c0ffee29 query_id:uint64 amount1:Coins amount2:Coins tx_initiator:MsgAddressInt params:^DepositLiquidityParamsTrimmed proof:^Cell = DepositLiquidityInternal;
 const int opcodes::deposit_liquidity_internal = 0xc0ffee29;
 ;; pool -> void
 ;; deposit_liquidity_successful_event#c0ffee33 query_id:uint64 amount1:Coins amount2:Coins lp_amount:Coins total_supply:PoolReserves reserves:PoolReserves = DepositLiquiditySuccessfulEvent;

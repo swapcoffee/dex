@@ -5,13 +5,13 @@ import {Factory} from "../wrappers/Factory";
 import {printTransactions} from "../wrappers/utils";
 import {VaultJetton} from "../wrappers/VaultJetton";
 import {CodeCells, compileCodes} from "./utils";
-import { deployJettonWithoutVault } from './helpers';
+import { DEFAULT_TIMEOUT, deployJettonWithoutVault } from './helpers';
 
 describe('Test', () => {
     let codeCells: CodeCells;
     beforeAll(async () => {
         codeCells = await compileCodes();
-    });
+    }, DEFAULT_TIMEOUT);
 
     let blockchain: Blockchain;
     let admin: SandboxContract<TreasuryContract>;
@@ -26,7 +26,7 @@ describe('Test', () => {
         );
         console.log('factory address =', factory.address.toRawString());
         await factory.sendDeploy(admin.getSender(), toNano(1.0));
-    });
+    }, DEFAULT_TIMEOUT);
 
     it('deploy vault for token without wallet resolver', async () => {
         const jetton = await deployJettonWithoutVault(

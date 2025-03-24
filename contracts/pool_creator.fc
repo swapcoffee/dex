@@ -42,13 +42,14 @@ global int storage::amount2;
             .store_uint(query_id, 64)
             .store_coins(storage::amount1)
             .store_coins(storage::amount2)
+            .store_slice(storage::owner_address)
             .store_ref(creation_params)
             .store_ref(storage::init_data_cell),
         SEND_MODE_SELF_DESTROY
     );
 }
 
-() payout(int query_id, slice asset, int amount, int mode) impure inline {
+() payout(int query_id, slice recipient, slice asset, int amount, int mode) impure inline {
     send_hash_builder(
         calculate_vault_address_hash(
             storage::factory_address,
@@ -59,7 +60,7 @@ global int storage::amount2;
         begin_cell()
             .store_uint(opcodes::payout_internal, 32)
             .store_uint(query_id, 64)
-            .store_slice(storage::owner_address)
+            .store_slice(recipient)
             .store_coins(amount)
             .store_uint(0, 1)
             .store_uint(1, 1)
@@ -91,7 +92,12 @@ global int storage::amount2;
                 }
             } else {
                 reserve_for_carry_inbound_without_value();
-                payout(query_id, asset, amount, SEND_MODE_CARRY_ALL_BALANCE);
+                slice params_cs = creation_params.begin_parse();
+                slice recipient = params_cs~load_msg_addr();
+                ifnot (params_cs~load_int(1)) {
+                    recipient = storage::owner_address;
+                }
+                payout(query_id, recipient, asset, amount, SEND_MODE_CARRY_ALL_BALANCE);
                 commit();
                 throw(errors::invalid_liquidity);
             }
@@ -105,7 +111,12 @@ global int storage::amount2;
                 }
             } else {
                 reserve_for_carry_inbound_without_value();
-                payout(query_id, asset, amount, SEND_MODE_CARRY_ALL_BALANCE);
+                slice params_cs = creation_params.begin_parse();
+                slice recipient = params_cs~load_msg_addr();
+                ifnot (params_cs~load_uint(1)) {
+                    recipient = storage::owner_address;
+                }
+                payout(query_id, recipient, asset, amount, SEND_MODE_CARRY_ALL_BALANCE);
                 commit();
                 throw(errors::invalid_liquidity);
             }
@@ -126,7 +137,7 @@ global int storage::amount2;
             amount = storage::amount2;
             asset = storage::asset2;
         }
-        payout(query_id, asset, amount, SEND_MODE_SELF_DESTROY);
+        payout(query_id, sender_address, asset, amount, SEND_MODE_SELF_DESTROY);
     } elseif (opcode == opcodes::update_contract_internal) {
         throw_unless(errors::not_a_factory, equal_slice_bits(storage::factory_address, sender_address));
         reserve_for_carry_inbound_without_value();

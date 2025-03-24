@@ -36,7 +36,7 @@ export type CodeCells = {
 let codeCells: CodeCells | null = null
 
 export async function compileCodes(): Promise<CodeCells> {
-    if (codeCells == null) {
+    if (codeCells === null) {
         const cells = await compileMany([
             'LpWallet',
             'Init',

@@ -17,7 +17,7 @@ import {
     PoolParams, SwapParams, SwapStepParams
 } from '../wrappers/types';
 import { VaultExtra } from '../wrappers/VaultExtra';
-import { deployJettonWithVault, deployNativeVault, JettonDataWithVault } from './helpers';
+import { DEFAULT_TIMEOUT, deployJettonWithVault, deployNativeVault, JettonDataWithVault } from './helpers';
 
 /**
  * Набор тестов, покрывающих полный цикл взаимодействия юзера с протоколом
@@ -55,7 +55,7 @@ describe('Test', () => {
     let codeCells: CodeCells;
     beforeAll(async () => {
         codeCells = await compileCodes();
-    });
+    }, DEFAULT_TIMEOUT);
 
     let blockchain: Blockchain;
     let admin: SandboxContract<TreasuryContract>;
@@ -509,7 +509,7 @@ describe('Test', () => {
             'vaultJetton4:', jetton4.vault.address.toRawString(), '\n'
         );
 
-    });
+    }, DEFAULT_TIMEOUT);
 
     test.each(allPools)('provide wallet address pool %i %i %i', async (a, b, c) => {
         let vaultA = resolveVault(a as VaultTypes);

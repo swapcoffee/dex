@@ -135,6 +135,7 @@ export class PoolParams extends CellSerializable {
 export class PublicPoolCreationParams extends CellSerializable {
     constructor(
         public recipient: Address,
+        public use_recipient_on_failure: boolean = false,
         public notification_data: NotificationData | null = null,
     ) {
         super();
@@ -142,6 +143,7 @@ export class PublicPoolCreationParams extends CellSerializable {
 
     public write(b: Builder): void {
         b.storeAddress(this.recipient);
+        b.storeBit(this.use_recipient_on_failure);
         b.storeMaybeRef(this.notification_data?.toCell());
     }
 }
@@ -404,23 +406,20 @@ export class DepositLiquidityParamsTrimmed extends CellSerializable {
         public recipient: Address | null,
         public referral: Address | null,
         public notification_data: NotificationData | null,
+        public use_recipient_on_failure: boolean = false
     ) {
         super();
     }
 
     public write(b: Builder): void {
         b.storeAddress(this.recipient)
+            .storeBit(this.use_recipient_on_failure)
             .storeAddress(this.referral)
             .storeUint(this.deadline, 32)
             .storeUint(1, 2)
             .storeCoins(this.min_lp_amount)
             .storeMaybeRef(null)
             .storeMaybeRef(this.notification_data?.toCell());
-        // b.storeUint(this.deadline, 32)
-        //     .storeCoins(this.min_lp_amount)
-        //     .storeAddress(this.recipient)
-        //     .storeAddress(this.referral)
-        //     .storeMaybeRef(this.notification_data?.toCell());
     }
 }
 

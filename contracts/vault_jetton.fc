@@ -179,6 +179,7 @@ global slice storage::jetton_wallet_address;
             }
             (asset1, asset2, _) = sort_assets(asset1, asset2);
             slice recipient = fwd_payload_cs~load_msg_addr();
+            int use_recipient_on_failure = fwd_payload_cs~load_int(1);
             cell notification_data = fwd_payload_cs~load_maybe_ref();
             int is_active = fwd_payload_cs~load_uint(1);
             cell extra_settings = fwd_payload_cs~load_maybe_ref();
@@ -196,6 +197,7 @@ global slice storage::jetton_wallet_address;
                     .store_ref(
                         begin_cell()
                             .store_slice(recipient)
+                            .store_int(use_recipient_on_failure, 1)
                             .store_maybe_ref(notification_data)
                             .store_uint(is_active, 1)
                             .store_maybe_ref(extra_settings)

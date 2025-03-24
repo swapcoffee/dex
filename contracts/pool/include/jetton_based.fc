@@ -175,12 +175,18 @@
 () deposit_liquidity(slice sender_address, int query_id, slice in_msg_body, int creation) impure inline_ref {
     int amount1 = in_msg_body~load_coins();
     int amount2 = in_msg_body~load_coins();
+    slice success_address = in_msg_body~load_msg_addr();
+    slice failure_address = success_address;
+
     int min_lp_amount = 1;
-    slice recipient = "";
     cell notification_data = null();
     cell notification_data_single = null();
+
     if (creation) {
-        recipient = in_msg_body~load_msg_addr();
+        success_address = in_msg_body~load_msg_addr();
+        if (in_msg_body~load_int(1)) {
+            failure_address = success_address;
+        }
         in_msg_body~load_maybe_ref(); ;; extra_settings, will be used for concentrated liquidity later
         notification_data = in_msg_body~load_maybe_ref();
         int excno = 0;
@@ -200,7 +206,7 @@
                 query_id,
                 amount1,
                 amount2,
-                recipient,
+                failure_address,
                 min_lp_amount,
                 notification_data,
                 self_destroy
@@ -210,8 +216,11 @@
         slice params = in_msg_body~load_ref().begin_parse();
         cell proof = in_msg_body~load_ref();
         verify_proof(storage::factory_address, storage::init_code_cell, sender_address, proof);
-        recipient = params~load_msg_addr();
-        params~load_msg_addr(); ;; used in offchain tracking
+        success_address = params~load_msg_addr();
+        if (params~load_int(1)) {
+            failure_address = success_address;
+        }
+        params~load_msg_addr(); ;; referral: used in offchain tracking
         int deadline = params~load_uint(32);
         int condition_type = params~load_uint(2);
         int excno = 0;
@@ -254,7 +263,7 @@
                 query_id,
                 amount1,
                 amount2,
-                recipient,
+                failure_address,
                 min_lp_amount,
                 notification_data,
                 false
@@ -273,7 +282,7 @@
             query_id,
             amount1,
             amount2,
-            recipient,
+            failure_address,
             min_lp_amount,
             notification_data,
             creation
@@ -318,7 +327,7 @@
     }
     int inbound_balance_left = get_incoming_value_minus_storage_fees();
     throw_unless(errors::not_enough_gas, inbound_balance_left > notification_fwd_gas);
-    cell state_init = gen_lp_wallet_state_init(recipient, my_address(), storage::lp_wallet_code);
+    cell state_init = gen_lp_wallet_state_init(success_address, my_address(), storage::lp_wallet_code);
     int destination_hash = cell_hash(state_init);
 
     if (creation) {
@@ -335,7 +344,7 @@
                 storage::asset1
             ),
             fwd_value,
-            build_payout_internal_body(query_id, recipient, amount1 - amount1_used, null(), storage::init_data_cell),
+            build_payout_internal_body(query_id, success_address, amount1 - amount1_used, null(), storage::init_data_cell),
             SEND_MODE_REGULAR
         );
     }
@@ -347,7 +356,7 @@
                 storage::asset2
             ),
             fwd_value,
-            build_payout_internal_body(query_id, recipient, amount2 - amount2_used, null(), storage::init_data_cell),
+            build_payout_internal_body(query_id, success_address, amount2 - amount2_used, null(), storage::init_data_cell),
             SEND_MODE_REGULAR
         );
     }
@@ -359,13 +368,13 @@
                 .store_uint(query_id, 64)
                 .store_coins(lp_amount)
                 .store_slice(my_address())
-                .store_slice(recipient)
+                .store_slice(success_address)
                 .store_coins(0)
                 .store_uint(0, 1)
                 .end_cell(),
             state_init
         );
-    } elseif (is_address_none(notification_receiver) | equal_slice_bits(recipient, notification_receiver)) {
+    } elseif (is_address_none(notification_receiver) | equal_slice_bits(success_address, notification_receiver)) {
         send_hash_cell_init_carry_inbound(
             destination_hash,
             begin_cell()
@@ -373,7 +382,7 @@
                 .store_uint(query_id, 64)
                 .store_coins(lp_amount)
                 .store_slice(my_address())
-                .store_slice(recipient)
+                .store_slice(success_address)
                 .store_coins(notification_fwd_gas)
                 .store_maybe_ref(notification)
                 .end_cell(),
@@ -392,7 +401,7 @@
                 .store_uint(query_id, 64)
                 .store_coins(lp_amount)
                 .store_slice(my_address())
-                .store_slice(recipient)
+                .store_slice(success_address)
                 .store_coins(0)
                 .store_uint(0, 1)
                 .end_cell(),
@@ -410,6 +419,12 @@
     cell custom_payload = in_msg_body~load_maybe_ref();
     cell on_success = null();
 
+    slice failure_address = from_address;
+    slice success_address = from_address;
+    ifnot (is_address_none(response_address)) {
+        success_address = response_address;
+    }
+
     int reserve1 = storage::reserve1;
     int reserve2 = storage::reserve2;
     int total_supply = storage::total_supply;
@@ -422,6 +437,9 @@
     int excno = 0;
     ifnot (cell_null?(custom_payload)) {
         slice params = custom_payload.begin_parse();
+        if (params~load_int(1)) {
+            failure_address = success_address;
+        }
         int deadline = params~load_uint(32);
         if (deadline < now()) {
             excno = errors::deadline_exceeded;
@@ -472,7 +490,7 @@
                 .store_uint(query_id, 64)
                 .store_coins(lp_amount)
                 .store_slice(my_address())
-                .store_slice(from_address)
+                .store_slice(failure_address)
                 .store_coins(0)
                 .store_uint(0, 1)
                 .end_cell()
@@ -505,10 +523,7 @@
         What we do here is sending both excesses and withdrawn liquidity to the same address: it is
         either the response_address (if any) or sender (otherwise).
     -}
-    ifnot (is_address_none(response_address)) {
-        from_address = response_address;
-    }
-    send_back(query_id, amount1, amount2, from_address, null(), on_success, false);
+    send_back(query_id, amount1, amount2, success_address, null(), on_success, false);
 }
 
 {- GET METHODS -}

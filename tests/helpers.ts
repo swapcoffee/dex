@@ -1,11 +1,13 @@
 import { Blockchain, SandboxContract, TreasuryContract } from '@ton/sandbox';
 import { JettonMaster, JettonWallet } from '../wrappers/Jetton';
 import { VaultJetton } from '../wrappers/VaultJetton';
-import { toNano } from '@ton/core';
+import { beginCell, Cell, toNano } from '@ton/core';
 import { getTransactionAccount, printTransactions } from '../wrappers/utils';
 import { Factory } from '../wrappers/Factory';
 import { VaultNative } from '../wrappers/VaultNative';
 import { VaultExtra } from '../wrappers/VaultExtra';
+
+export const DEFAULT_TIMEOUT = 15000
 
 export type JettonData = {
     master: SandboxContract<JettonMaster>,
@@ -16,6 +18,33 @@ export type JettonDataWithVault = {
     master: SandboxContract<JettonMaster>,
     wallet: SandboxContract<JettonWallet>,
     vault: SandboxContract<VaultJetton>
+}
+
+export type SwapData = {
+    input_amount: bigint,
+    reserve1: bigint,
+    reserve2: bigint,
+    direction: bigint,
+    expected_output_amount: bigint
+}
+
+export type LiquidityAdditionData = {
+    total_supply: bigint,
+    reserve1: bigint,
+    reserve2: bigint,
+    amount1: bigint,
+    amount2: bigint,
+    expected_lp_amount: bigint
+}
+
+export type CellWithSwapData = {
+    cell: Cell,
+    swap_data: SwapData[]
+}
+
+export type CellWithLiquidityAdditionData = {
+    cell: Cell,
+    liquidity_addition_data: LiquidityAdditionData[]
 }
 
 export async function deployJettonWithoutVault(
@@ -172,4 +201,77 @@ export async function deployExtraVault(
     // 2 + 1
     expect(res.transactions.length).toBe(3)
     return extraVault
+}
+
+export function prepareMultiSwapsCells(entries: SwapData[]): CellWithSwapData[] {
+    return prepareMultiCells(
+        entries,
+        (entry, next) => {
+            let builder = beginCell()
+                .storeCoins(entry.input_amount)
+                .storeCoins(entry.reserve1)
+                .storeCoins(entry.reserve2)
+                .storeUint(entry.direction, 1)
+            if (entry.expected_output_amount === -1n) {
+                builder.storeInt(0n, 1)
+            } else {
+                builder.storeInt(-1n, 1)
+                    .storeCoins(entry.expected_output_amount)
+            }
+            return builder.storeMaybeRef(next).endCell()
+        },
+        (cell, data) => {
+            return {cell, swap_data: data}
+        }
+    )
+}
+
+export function prepareMultiLiquidityAdditionCells(entries: LiquidityAdditionData[]): CellWithLiquidityAdditionData[] {
+    return prepareMultiCells(
+        entries,
+        (entry, next) => {
+            let builder = beginCell()
+                .storeCoins(entry.total_supply)
+                .storeCoins(entry.reserve1)
+                .storeCoins(entry.reserve2)
+                .storeCoins(entry.amount1)
+                .storeCoins(entry.amount2)
+            if (entry.expected_lp_amount === -1n) {
+                builder.storeInt(0n, 1)
+            } else {
+                builder.storeInt(-1n, 1)
+                    .storeCoins(entry.expected_lp_amount)
+            }
+            return builder.storeMaybeRef(next).endCell()
+        },
+        (cell, data) => {
+            return {cell, liquidity_addition_data: data}
+        }
+    )
+}
+
+function prepareMultiCells<E, R>(
+    entries: E[],
+    cellBuilder: (entry: E, next: Cell | null) => Cell,
+    resultBuilder: (cell: Cell, data: E[]) => R
+) {
+    const result: R[] = []
+    let currentCell: Cell | null = null
+    let currentDepth = 0
+    let currentData: E[] = []
+    for (let i = entries.length - 1; i >= 0; --i) {
+        const entry = entries[i]
+        currentCell = cellBuilder(entry, currentCell)
+        currentData.unshift(entry)
+        if (++currentDepth === 256) {
+            result.push(resultBuilder(currentCell, currentData))
+            currentCell = null
+            currentDepth = 0
+            currentData = []
+        }
+    }
+    if (currentDepth !== 0) {
+        result.push(resultBuilder(currentCell!, currentData))
+    }
+    return result
 }

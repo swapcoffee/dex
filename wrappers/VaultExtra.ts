@@ -47,7 +47,7 @@ export class VaultExtra implements Contract {
             value,
             params,
             new PoolCreationParams(
-                new PublicPoolCreationParams(recipient, notification_data),
+                new PublicPoolCreationParams(recipient, false, notification_data),
                 new PrivatePoolCreationParams(true, null)
             )
         )

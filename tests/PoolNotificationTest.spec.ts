@@ -18,7 +18,7 @@ import {BlockchainTransaction} from "@ton/sandbox/dist/blockchain/Blockchain";
 import {VaultExtra} from "../wrappers/VaultExtra";
 import {printTransactions} from "../wrappers/utils";
 import {PoolJettonBased} from "../wrappers/PoolJettonBased";
-import { deployJettonWithVault, deployNativeVault, JettonDataWithVault } from './helpers';
+import { DEFAULT_TIMEOUT, deployJettonWithVault, deployNativeVault, JettonDataWithVault } from './helpers';
 
 
 enum VaultTypes {
@@ -153,11 +153,13 @@ describe('Test', () => {
         return wallet.address
     }
 
-    async function validateBadResponseFromVault(txs: BlockchainTransaction[],
-                                                t: VaultTypes,
-                                                assetValue: bigint,
-                                                cell: Cell,
-                                                notificationReceiver: Address) {
+    async function validateBadResponseFromVault(
+        txs: BlockchainTransaction[],
+        t: VaultTypes,
+        assetValue: bigint,
+        cell: Cell,
+        notificationReceiver: Address
+    ) {
         if (t == VaultTypes.NATIVE_VAULT) {
             expect(txs).toHaveTransaction(
                 {
@@ -224,7 +226,7 @@ describe('Test', () => {
     let codeCells: CodeCells;
     beforeAll(async () => {
         codeCells = await compileCodes();
-    });
+    }, DEFAULT_TIMEOUT);
 
     let blockchain: Blockchain;
     let admin: SandboxContract<TreasuryContract>;
@@ -295,7 +297,7 @@ describe('Test', () => {
             user.address,
             toNano(50.0)
         )
-    });
+    }, DEFAULT_TIMEOUT);
 
     test.each(testArguments)
     ('init pool success, success notification, %i, %i, %i', async (t1, t2, n) => {
@@ -388,18 +390,21 @@ describe('Test', () => {
     test.each(testArguments)
     ('init pool failed, failure notification, %i, %i, %i', async (t1, t2, n) => {
 
-        let notificationAddress;
-        let resolvedNotificationAddress = user.address;
+        let notificationAddress: Address | null
+        let resolvedNotificationAddress: Address
         if (n == 0) {
-            notificationAddress = null;
+            notificationAddress = null
+            resolvedNotificationAddress = user.address
         } else if (n == 1) {
-            notificationAddress = user.address;
+            notificationAddress = user.address
+            resolvedNotificationAddress = user.address
         } else {
-            notificationAddress = admin.address;
-            resolvedNotificationAddress = admin.address;
+            notificationAddress = admin.address
+            resolvedNotificationAddress = admin.address
         }
 
-        await createPool(user,
+        await createPool(
+            user,
             resolveVault(t1),
             20n,
             new PoolParams(
@@ -409,7 +414,8 @@ describe('Test', () => {
             ),
             null
         );
-        let txs = await createPool(user,
+        let txs = await createPool(
+            user,
             resolveVault(t2),
             20n,
             new PoolParams(
@@ -435,21 +441,22 @@ describe('Test', () => {
         );
         printTransactions(txs.transactions);
         // pool not created => Error: Trying to run get method on non-active contract
-        await expect(async () => {
-            await pool.getJettonData()
-        }).rejects.toThrow()
+        await expect(async () => { await pool.getJettonData() }).rejects.toThrow()
 
-        await validateBadResponseFromVault(txs.transactions,
+        await validateBadResponseFromVault(
+            txs.transactions,
             t1,
             20n,
             beginCell().storeUint(12345, 32).endCell(),
             resolvedNotificationAddress
         )
-        await validateBadResponseFromVault(txs.transactions,
+        await validateBadResponseFromVault(
+            txs.transactions,
             t2,
             20n,
             beginCell().storeUint(12345, 32).endCell(),
-            resolvedNotificationAddress)
+            resolvedNotificationAddress
+        )
     });
 
     test.each(testArguments)
