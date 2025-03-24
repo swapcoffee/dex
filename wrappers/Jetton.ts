@@ -226,7 +226,7 @@ export function transferBodyWithPayload(myAddress: Address | undefined, toOwnerA
         .endCell();
 }
 
-export function burnBody(ownerAddress: Address, amount: bigint, payload: Cell|null): Cell {
+export function burnBody(ownerAddress: Address, amount: bigint, payload: Cell | null): Cell {
     return beginCell()
         .storeUint(Opcodes.burn, 32)
         .storeUint(0, 64)

@@ -38,6 +38,7 @@ let codeCells: CodeCells | null = null
 export async function compileCodes(): Promise<CodeCells> {
     if (codeCells == null) {
         const cells = await compileMany([
+            'LpWallet',
             'Init',
             'VaultNative',
             'VaultJetton',
@@ -50,7 +51,7 @@ export async function compileCodes(): Promise<CodeCells> {
         ])
         let index = 0;
         codeCells = {
-            lpWallet: lpWalletCode,
+            lpWallet: cells[index++],
             init: cells[index++],
             vaultNative: cells[index++],
             vaultJetton: cells[index++],
