@@ -122,7 +122,12 @@ export async function run(provider: NetworkProvider) {
             AMM[x].toString(),
         );
 
-        let poolAddress = await factory.getPoolAddress(tokenForPool1, tokenForPool2, poolType);
+        let ammSettings: Cell | null = null;
+        if (poolType == AMM.CurveFiStable) {
+            ammSettings = beginCell().storeUint(2_000, 16).storeCoins(1).storeCoins(1).endCell();
+        }
+
+        let poolAddress = await factory.getPoolAddress(tokenForPool1, tokenForPool2, poolType, ammSettings);
         let isCreated = (await provider.isContractDeployed(poolAddress))
             ? DepositOrProvide.PROVIDE_LP
             : DepositOrProvide.CREATE_LP;
@@ -133,24 +138,19 @@ export async function run(provider: NetworkProvider) {
         console.log('Pool will be deployed at:', poolAddress.toRawString());
         console.log('Is pool created:', await provider.isContractDeployed(poolAddress), 'DepositOrProvide', isCreated);
 
-        let ammSettings: Cell | null = null;
-        if (poolType == AMM.CurveFiStable) {
-            ammSettings = beginCell().storeUint(2_000, 16).storeCoins(1).storeCoins(1).endCell();
-        }
-
         await sendMessage(provider, factory, tokenForPool1, tokenForPool2, asset1, poolType, ammSettings, isCreated);
         if (isCreated == DepositOrProvide.CREATE_LP) {
             await provider.waitForDeploy(
-                await factory.getPoolCreatorAddress(deployer, tokenForPool1, tokenForPool2, poolType),
+                await factory.getPoolCreatorAddress(deployer, tokenForPool1, tokenForPool2, poolType, ammSettings),
                 60,
             );
         } else {
             await provider.waitForDeploy(
-                await factory.getLiquidityDepositoryAddress(deployer, tokenForPool1, tokenForPool2, poolType),
+                await factory.getLiquidityDepositoryAddress(deployer, tokenForPool1, tokenForPool2, poolType, ammSettings),
                 60,
             );
         }
         await sendMessage(provider, factory, tokenForPool2, tokenForPool1, asset2, poolType, ammSettings, isCreated);
-        await provider.waitForDeploy(await factory.getPoolAddress(tokenForPool1, tokenForPool2, poolType), 60);
+        await provider.waitForDeploy(await factory.getPoolAddress(tokenForPool1, tokenForPool2, poolType, ammSettings), 60);
     }
 }

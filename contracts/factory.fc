@@ -398,6 +398,10 @@ global cell storage::pool_creator_code_cell;
     return (construct_address(BASECHAIN, hash), hash);
 }
 
+(slice, int) get_pool_address_no_settings(slice asset1, slice asset2, int amm) method_id {
+    return get_pool_address(asset1, asset2, amm, null());
+}
+
 (slice, int) get_pool_creator_address(slice owner, slice asset1, slice asset2, int amm, cell amm_settings) method_id {
     load_data();
     int hash = calculate_account_hash_cheap_from_cells(
@@ -407,6 +411,10 @@ global cell storage::pool_creator_code_cell;
     return (construct_address(BASECHAIN, hash), hash);
 }
 
+(slice, int) get_pool_creator_address_no_settings(slice owner, slice asset1, slice asset2, int amm) method_id {
+    return get_pool_creator_address(owner, asset1, asset2, amm, null());
+}
+
 (slice, int) get_liquidity_depository_address(slice owner, slice asset1, slice asset2, int amm, cell amm_settings) method_id {
     load_data();
     int hash = calculate_account_hash_cheap_from_cells(
@@ -414,6 +422,10 @@ global cell storage::pool_creator_code_cell;
         gen_liquidity_depository_init_data(my_address(), owner, asset1, asset2, amm, amm_settings)
     );
     return (construct_address(BASECHAIN, hash), hash);
+}
+
+(slice, int) get_liquidity_depository_address_no_settings(slice owner, slice asset1, slice asset2, int amm) method_id {
+    return get_liquidity_depository_address(owner, asset1, asset2, amm, null());
 }
 
 slice get_admin_address() method_id {

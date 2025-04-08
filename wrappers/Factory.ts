@@ -5,28 +5,24 @@ import {
     Cell,
     Contract,
     contractAddress,
-    ContractProvider, Dictionary,
+    ContractProvider,
+    Dictionary,
     Sender,
-    SendMode, Slice, TupleItemCell, TupleItemNull
+    SendMode,
+    Slice,
 } from '@ton/core';
-import {AMM, Asset, AssetExtra, AssetJetton, AssetNative, PoolParams, PoolUpdateParams} from "./types";
-import {CodeCells} from "../tests/utils";
-import {PoolConstantProduct} from "./PoolConstantProduct";
-import {PoolCurveFiStable} from "./PoolCurveFiStable";
-import {PoolJettonBased} from "./PoolJettonBased";
+import { AMM, Asset, AssetExtra, AssetJetton, AssetNative, PoolParams } from './types';
+import { CodeCells } from '../tests/utils';
+import { PoolConstantProduct } from './PoolConstantProduct';
+import { PoolCurveFiStable } from './PoolCurveFiStable';
+import { PoolJettonBased } from './PoolJettonBased';
 
 export function buildDataCell(admin: Address, withdrawer: Address, codeCells: CodeCells): Cell {
-    const vaultCodeDict = Dictionary.empty(
-        Dictionary.Keys.Uint(2),
-        Dictionary.Values.Cell()
-    );
+    const vaultCodeDict = Dictionary.empty(Dictionary.Keys.Uint(2), Dictionary.Values.Cell());
     vaultCodeDict.set(0, codeCells.vaultNative);
     vaultCodeDict.set(1, codeCells.vaultJetton);
     vaultCodeDict.set(2, codeCells.vaultExtra);
-    const poolCodeDict = Dictionary.empty(
-        Dictionary.Keys.Uint(3),
-        Dictionary.Values.Cell()
-    );
+    const poolCodeDict = Dictionary.empty(Dictionary.Keys.Uint(3), Dictionary.Values.Cell());
     poolCodeDict.set(0, codeCells.poolConstantProduct);
     poolCodeDict.set(1, codeCells.poolCurveFiStable);
     return beginCell()
@@ -38,20 +34,17 @@ export function buildDataCell(admin: Address, withdrawer: Address, codeCells: Co
                 .storeRef(codeCells.init)
                 .storeRef(codeCells.liquidityDepository)
                 .storeRef(codeCells.poolCreator)
-                .endCell()
+                .endCell(),
         )
-        .storeRef(
-            beginCell()
-                .storeDict(vaultCodeDict)
-                .storeDict(poolCodeDict)
-                .endCell()
-        )
+        .storeRef(beginCell().storeDict(vaultCodeDict).storeDict(poolCodeDict).endCell())
         .endCell();
 }
 
 export class Factory implements Contract {
-    constructor(readonly address: Address, readonly init?: { code: Cell; data: Cell }) {
-    }
+    constructor(
+        readonly address: Address,
+        readonly init?: { code: Cell; data: Cell },
+    ) {}
 
     static createFromAddress(address: Address) {
         return new Factory(address);
@@ -59,7 +52,7 @@ export class Factory implements Contract {
 
     static createFromData(admin: Address, codeCells: CodeCells, withdrawer: Address = admin, workchain = 0) {
         const data = buildDataCell(admin, withdrawer, codeCells);
-        const init = {code: codeCells.factory, data};
+        const init = { code: codeCells.factory, data };
         return new Factory(contractAddress(workchain, init), init);
     }
 
@@ -68,7 +61,7 @@ export class Factory implements Contract {
             value,
             bounce,
             body,
-            sendMode: SendMode.PAY_GAS_SEPARATELY
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
         });
     }
 
@@ -77,50 +70,61 @@ export class Factory implements Contract {
     }
 
     async sendCreateVault(provider: ContractProvider, via: Sender, value: bigint, asset: any) {
-        const b = beginCell()
-            .storeUint(0xc0ffee06, 32)
-            .storeUint(0, 64);
+        const b = beginCell().storeUint(0xc0ffee06, 32).storeUint(0, 64);
         this.serializeAsset(b, asset);
         await this.sendMessage(provider, via, value, b.endCell());
     }
 
     async sendUpdateAdmin(provider: ContractProvider, via: Sender, value: bigint, address: Address | null) {
-        return await this.sendMessage(provider, via, value, beginCell()
-            .storeUint(0xc0ffee40, 32)
-            .storeUint(0, 64)
-            .storeAddress(address)
-            .endCell());
+        return await this.sendMessage(
+            provider,
+            via,
+            value,
+            beginCell().storeUint(0xc0ffee40, 32).storeUint(0, 64).storeAddress(address).endCell(),
+        );
     }
 
     async sendUpdateCodeCell(provider: ContractProvider, via: Sender, value: bigint, code: Cell) {
-        return await this.sendMessage(provider, via, value, beginCell()
-            .storeUint(0xc0ffee44, 32)
-            .storeUint(0, 64)
-            .storeRef(code)
-            .endCell());
+        return await this.sendMessage(
+            provider,
+            via,
+            value,
+            beginCell().storeUint(0xc0ffee44, 32).storeUint(0, 64).storeRef(code).endCell(),
+        );
     }
 
-    async sendUpdateContract(provider: ContractProvider, via: Sender, value: bigint, destination: Address | null,
-                             code: Cell | null, data: Cell | null) {
-        return await this.sendMessage(provider, via, value, beginCell()
-            .storeUint(0xc0ffee45, 32)
-            .storeUint(0, 64)
-            .storeAddress(destination)
-            .storeMaybeRef(code)
-            .storeMaybeRef(data)
-            .endCell());
-    }
-
-    async sendUpdatePool(provider: ContractProvider, via: Sender,
-                         value: bigint,
-                         pool_params: PoolParams,
-                         protocol_fee: number | null,
-                         lp_fee: number | null,
-                         is_active: boolean | null
+    async sendUpdateContract(
+        provider: ContractProvider,
+        via: Sender,
+        value: bigint,
+        destination: Address | null,
+        code: Cell | null,
+        data: Cell | null,
     ) {
-        const b = beginCell()
-            .storeUint(0xc0ffee41, 32)
-            .storeUint(0, 64);
+        return await this.sendMessage(
+            provider,
+            via,
+            value,
+            beginCell()
+                .storeUint(0xc0ffee45, 32)
+                .storeUint(0, 64)
+                .storeAddress(destination)
+                .storeMaybeRef(code)
+                .storeMaybeRef(data)
+                .endCell(),
+        );
+    }
+
+    async sendUpdatePool(
+        provider: ContractProvider,
+        via: Sender,
+        value: bigint,
+        pool_params: PoolParams,
+        protocol_fee: number | null,
+        lp_fee: number | null,
+        is_active: boolean | null,
+    ) {
+        const b = beginCell().storeUint(0xc0ffee41, 32).storeUint(0, 64);
         pool_params.write(b);
 
         const paramBuilder = beginCell();
@@ -132,23 +136,22 @@ export class Factory implements Contract {
         }
         if (is_active != null) {
             flag += 2;
-            paramBuilder.storeBit(is_active)
+            paramBuilder.storeBit(is_active);
         }
 
-        b.storeRef(
-            beginCell()
-                .storeUint(flag, 2)
-                .storeBuilder(paramBuilder)
-                .endCell()
-        );
+        b.storeRef(beginCell().storeUint(flag, 2).storeBuilder(paramBuilder).endCell());
         await this.sendMessage(provider, via, value, b.endCell());
     }
 
-    async sendActivateVault(provider: ContractProvider, via: Sender, value: bigint, asset: any, wallet: Address | null) {
-        const b = beginCell()
-            .storeUint(0xc0ffee42, 32)
-            .storeUint(0, 64)
-        this.serializeAsset(b, asset)
+    async sendActivateVault(
+        provider: ContractProvider,
+        via: Sender,
+        value: bigint,
+        asset: any,
+        wallet: Address | null,
+    ) {
+        const b = beginCell().storeUint(0xc0ffee42, 32).storeUint(0, 64);
+        this.serializeAsset(b, asset);
         await this.sendMessage(provider, via, value, b.storeAddress(wallet).endCell());
     }
 
@@ -159,121 +162,176 @@ export class Factory implements Contract {
         pool: Address,
         asset: any,
         amount: bigint,
-        receiver: Address
+        receiver: Address,
     ) {
-        const b = beginCell()
-            .storeUint(0xc0ffee43, 32)
-            .storeUint(0, 64)
-            .storeAddress(pool)
-        this.serializeAsset(b, asset)
+        const b = beginCell().storeUint(0xc0ffee43, 32).storeUint(0, 64).storeAddress(pool);
+        this.serializeAsset(b, asset);
         b.storeCoins(amount).storeAddress(receiver);
         await this.sendMessage(provider, via, value, b.endCell());
     }
 
     async getVaultAddress(provider: ContractProvider, asset: any) {
-        const b = beginCell()
-        this.serializeAsset(b, asset)
-        let res = await provider.get("get_vault_address", [
-            {type: 'slice', cell: b.endCell()}
-        ]);
+        const b = beginCell();
+        this.serializeAsset(b, asset);
+        let res = await provider.get('get_vault_address', [{ type: 'slice', cell: b.endCell() }]);
         return res.stack.readAddress();
     }
 
     async getAdminAddress(provider: ContractProvider) {
-        let res = await provider.get("get_admin_address", []);
+        let res = await provider.get('get_admin_address', []);
         return res.stack.readAddressOpt();
     }
 
     async getCode(provider: ContractProvider) {
-        let res = await provider.get("get_code", []);
+        let res = await provider.get('get_code', []);
         return res.stack.readCell();
     }
 
-    async getPoolAddress(provider: ContractProvider, asset1: any, asset2: any, amm: AMM, ammSettings: Cell | null = null) {
-        const b1 = beginCell()
-        const b2 = beginCell()
-        this.serializeAsset(b1, asset1)
-        this.serializeAsset(b2, asset2)
-        let res = await provider.get("get_pool_address", [
-            {type: 'slice', cell: b1.endCell()},
-            {type: 'slice', cell: b2.endCell()},
-            {type: 'int', value: BigInt(amm)},
-            ammSettings === null ? {type: 'null'} : {type: 'cell', cell: ammSettings}
-        ]);
-        return res.stack.readAddress();
+    async getPoolAddress(
+        provider: ContractProvider,
+        asset1: any,
+        asset2: any,
+        amm: AMM,
+        ammSettings: Cell | null = null,
+    ) {
+        const b1 = beginCell();
+        const b2 = beginCell();
+        this.serializeAsset(b1, asset1);
+        this.serializeAsset(b2, asset2);
+        if (amm == AMM.ConstantProduct) {
+            let res = await provider.get('get_pool_address_no_settings', [
+                { type: 'slice', cell: b1.endCell() },
+                { type: 'slice', cell: b2.endCell() },
+                { type: 'int', value: BigInt(amm) },
+            ]);
+            return res.stack.readAddress();
+        } else {
+            let res = await provider.get('get_pool_address', [
+                { type: 'slice', cell: b1.endCell() },
+                { type: 'slice', cell: b2.endCell() },
+                { type: 'int', value: BigInt(amm) },
+                { type: 'cell', cell: ammSettings!! },
+            ]);
+            return res.stack.readAddress();
+        }
     }
 
-    async getPoolJettonBased(provider: ContractProvider, asset1: any, asset2: any, amm: AMM, ammSettings: Cell | null = null): Promise<PoolJettonBased> {
+    async getPoolJettonBased(
+        provider: ContractProvider,
+        asset1: any,
+        asset2: any,
+        amm: AMM,
+        ammSettings: Cell | null = null,
+    ): Promise<PoolJettonBased> {
         const address = await this.getPoolAddress(provider, asset1, asset2, amm, ammSettings);
         if (amm == AMM.ConstantProduct) {
             return PoolConstantProduct.createFromAddress(address);
         } else if (amm == AMM.CurveFiStable) {
             return PoolCurveFiStable.createFromAddress(address);
         } else {
-            throw new Error("unexpected AMM " + amm);
+            throw new Error('unexpected AMM ' + amm);
         }
     }
 
-    async getPoolAddressHash(provider: ContractProvider, asset1: any, asset2: any, amm: AMM, ammSettings: Cell | null = null) {
-        const b1 = beginCell()
-        const b2 = beginCell()
-        this.serializeAsset(b1, asset1)
-        this.serializeAsset(b2, asset2)
-        let res = await provider.get("get_pool_address", [
-            {type: 'slice', cell: b1.endCell()},
-            {type: 'slice', cell: b2.endCell()},
-            {type: 'int', value: BigInt(amm)},
-            ammSettings === null ? {type: 'null'} : {type: 'cell', cell: ammSettings}
+    async getPoolAddressHash(
+        provider: ContractProvider,
+        asset1: any,
+        asset2: any,
+        amm: AMM,
+        ammSettings: Cell | null = null,
+    ) {
+        const b1 = beginCell();
+        const b2 = beginCell();
+        this.serializeAsset(b1, asset1);
+        this.serializeAsset(b2, asset2);
+        let res = await provider.get('get_pool_address', [
+            { type: 'slice', cell: b1.endCell() },
+            { type: 'slice', cell: b2.endCell() },
+            { type: 'int', value: BigInt(amm) },
+            ammSettings === null ? { type: 'null' } : { type: 'cell', cell: ammSettings },
         ]);
         let stack = res.stack;
         stack.readAddress();
         return stack.readBigNumber();
     }
 
-    async getPoolCreatorAddress(provider: ContractProvider, owner: Address, asset1: any, asset2: any, amm: AMM, ammSettings: Cell | null = null) {
-        const b1 = beginCell()
-        const b2 = beginCell()
-        this.serializeAsset(b1, asset1)
-        this.serializeAsset(b2, asset2)
-        let res = await provider.get("get_pool_creator_address", [
-            {type: 'slice', cell: beginCell().storeAddress(owner).endCell()},
-            {type: 'slice', cell: b1.endCell()},
-            {type: 'slice', cell: b2.endCell()},
-            {type: 'int', value: BigInt(amm)},
-            ammSettings === null ? {type: 'null'} : {type: 'cell', cell: ammSettings}
-        ]);
-        return res.stack.readAddress();
+    async getPoolCreatorAddress(
+        provider: ContractProvider,
+        owner: Address,
+        asset1: any,
+        asset2: any,
+        amm: AMM,
+        ammSettings: Cell | null = null,
+    ) {
+        const b1 = beginCell();
+        const b2 = beginCell();
+        this.serializeAsset(b1, asset1);
+        this.serializeAsset(b2, asset2);
+        if (amm == AMM.ConstantProduct) {
+            let res = await provider.get('get_pool_creator_address_no_settings', [
+                { type: 'slice', cell: beginCell().storeAddress(owner).endCell() },
+                { type: 'slice', cell: b1.endCell() },
+                { type: 'slice', cell: b2.endCell() },
+                { type: 'int', value: BigInt(amm) },
+            ]);
+            return res.stack.readAddress();
+        } else {
+            let res = await provider.get('get_pool_creator_address', [
+                { type: 'slice', cell: beginCell().storeAddress(owner).endCell() },
+                { type: 'slice', cell: b1.endCell() },
+                { type: 'slice', cell: b2.endCell() },
+                { type: 'int', value: BigInt(amm) },
+                { type: 'cell', cell: ammSettings!! },
+            ]);
+            return res.stack.readAddress();
+        }
     }
 
-    async getLiquidityDepositoryAddress(provider: ContractProvider, owner: Address, asset1: any, asset2: any, amm: AMM, ammSettings: Cell | null = null) {
-        const b1 = beginCell()
-        const b2 = beginCell()
-        this.serializeAsset(b1, asset1)
-        this.serializeAsset(b2, asset2)
-        let res = await provider.get("get_liquidity_depository_address", [
-            {type: 'slice', cell: beginCell().storeAddress(owner).endCell()},
-            {type: 'slice', cell: b1.endCell()},
-            {type: 'slice', cell: b2.endCell()},
-            {type: 'int', value: BigInt(amm)},
-            ammSettings === null ? {type: 'null'} : {type: 'cell', cell: ammSettings}
-        ]);
-        return res.stack.readAddress();
+    async getLiquidityDepositoryAddress(
+        provider: ContractProvider,
+        owner: Address,
+        asset1: any,
+        asset2: any,
+        amm: AMM,
+        ammSettings: Cell | null = null,
+    ) {
+        const b1 = beginCell();
+        const b2 = beginCell();
+        this.serializeAsset(b1, asset1);
+        this.serializeAsset(b2, asset2);
+        if (amm == AMM.ConstantProduct) {
+            let res = await provider.get('get_liquidity_depository_address_no_settings', [
+                { type: 'slice', cell: beginCell().storeAddress(owner).endCell() },
+                { type: 'slice', cell: b1.endCell() },
+                { type: 'slice', cell: b2.endCell() },
+                { type: 'int', value: BigInt(amm) }
+            ]);
+            return res.stack.readAddress();
+        } else {
+            let res = await provider.get('get_liquidity_depository_address', [
+                { type: 'slice', cell: beginCell().storeAddress(owner).endCell() },
+                { type: 'slice', cell: b1.endCell() },
+                { type: 'slice', cell: b2.endCell() },
+                { type: 'int', value: BigInt(amm) },
+                { type: 'cell', cell: ammSettings!! },
+            ]);
+            return res.stack.readAddress();
+        }
     }
 
     private serializeAsset(b: Builder, asset: any) {
         if (asset === null) {
-            AssetNative.INSTANCE.write(b)
+            AssetNative.INSTANCE.write(b);
         } else if (asset instanceof Address) {
-            AssetJetton.fromAddress(asset).write(b)
-        } else if (typeof asset === "bigint") {
-            new AssetExtra(asset.valueOf()).write(b)
+            AssetJetton.fromAddress(asset).write(b);
+        } else if (typeof asset === 'bigint') {
+            new AssetExtra(asset.valueOf()).write(b);
         } else if (asset instanceof Asset) {
-            asset.write(b)
+            asset.write(b);
         } else if (asset instanceof Slice) {
             b.storeSlice(asset);
         } else {
-            throw new Error("unexpected asset")
+            throw new Error('unexpected asset');
         }
     }
-
 }
