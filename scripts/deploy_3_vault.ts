@@ -32,7 +32,7 @@ export async function run(provider: NetworkProvider) {
     }
 
     const tokenForVault = await parseAsset(ui, 'Insert token for vault:');
-    let vaultAddress = await factory.getVaultAddress(null);
+    let vaultAddress = await factory.getVaultAddress(tokenForVault);
 
     if (await provider.isContractDeployed(vaultAddress)) {
         console.log('Vault deployed, address =', vaultAddress.toRawString());
