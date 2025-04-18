@@ -318,12 +318,16 @@
     }
     slice notification_receiver = address_none();
     int notification_fwd_gas = 0;
-    cell notification = null();
+    builder notification = null();
     ifnot (cell_null?(notification_data_single)) {
         slice cs = notification_data_single.begin_parse();
         notification_receiver = cs~load_msg_addr();
         notification_fwd_gas = cs~load_coins();
-        notification = cs~load_ref();
+        cell original_notification = cs~load_ref();
+        notification = begin_cell()
+            .store_uint(opcodes::notification, 32)
+            .store_uint(query_id, 64)
+            .store_ref(original_notification);
     }
     int inbound_balance_left = get_incoming_value_minus_storage_fees();
     throw_unless(errors::not_enough_gas, inbound_balance_left > notification_fwd_gas);
@@ -360,7 +364,7 @@
             SEND_MODE_REGULAR
         );
     }
-    if (cell_null?(notification)) {
+    if (null?(notification)) {
         send_hash_cell_init_carry_inbound(
             destination_hash,
             begin_cell()
@@ -384,15 +388,15 @@
                 .store_slice(my_address())
                 .store_slice(success_address)
                 .store_coins(notification_fwd_gas)
-                .store_maybe_ref(notification)
+                .store_maybe_ref(notification.end_cell())
                 .end_cell(),
             state_init
         );
     } else {
-        send_cell(
+        send_builder_with_value(
             notification_receiver,
-            notification_fwd_gas,
-            notification
+            notification,
+            notification_fwd_gas
         );
         send_hash_cell_init_carry_inbound(
             destination_hash,

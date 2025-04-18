@@ -28,6 +28,14 @@ enum VaultTypes {
 }
 
 describe('Test', () => {
+    function encapsulate(notification: Cell): Cell {
+        return beginCell()
+            .storeUint(0xc0ffee36, 32)
+            .storeUint(0, 64)
+            .storeRef(notification)
+            .endCell();
+    }
+
     async function createPool(
         sender: SandboxContract<TreasuryContract>,
         vault: SandboxContract<VaultNative> | SandboxContract<VaultJetton> | SandboxContract<VaultExtra>,
@@ -322,6 +330,7 @@ describe('Test', () => {
             ),
             null
         );
+        const notification = beginCell().storeUint(1234, 32).endCell()
         let txs = await createPool(user,
             resolveVault(t2),
             toNano(1),
@@ -334,7 +343,7 @@ describe('Test', () => {
                 new NotificationDataSingle(
                     notificationAddress,
                     toNano(1) / 8n,
-                    beginCell().storeUint(1234, 32).endCell()
+                    notification
                 ),
                 null
             )
@@ -364,7 +373,7 @@ describe('Test', () => {
                     to: resolvedNotificationAddress,
                     success: true,
                     exitCode: 0,
-                    body: beginCell().storeUint(1234, 32).endCell()
+                    body: encapsulate(notification)
                 }
             )
         } else {
@@ -380,7 +389,7 @@ describe('Test', () => {
                         .storeUint(0, 64)
                         .storeCoins(toNano(1) - 1_000n)
                         .storeAddress(pool.address)
-                        .storeMaybeRef(beginCell().storeUint(1234, 32).endCell())
+                        .storeMaybeRef(encapsulate(notification))
                         .endCell()
                 }
             )
@@ -414,6 +423,7 @@ describe('Test', () => {
             ),
             null
         );
+        const notification = beginCell().storeUint(12345, 32).endCell()
         let txs = await createPool(
             user,
             resolveVault(t2),
@@ -428,7 +438,7 @@ describe('Test', () => {
                 new NotificationDataSingle(
                     notificationAddress,
                     toNano(1) / 8n,
-                    beginCell().storeUint(12345, 32).endCell()
+                    notification
                 )
             )
         )
@@ -447,14 +457,14 @@ describe('Test', () => {
             txs.transactions,
             t1,
             20n,
-            beginCell().storeUint(12345, 32).endCell(),
+            encapsulate(notification),
             resolvedNotificationAddress
         )
         await validateBadResponseFromVault(
             txs.transactions,
             t2,
             20n,
-            beginCell().storeUint(12345, 32).endCell(),
+            encapsulate(notification),
             resolvedNotificationAddress
         )
     });
@@ -520,6 +530,7 @@ describe('Test', () => {
                 )
             )
         )
+        const notification = beginCell().storeUint(123456, 32).endCell()
         let txs = await depositLiquidity(user, resolveVault(t2), toNano(1),
             new DepositLiquidityParams(
                 new DepositLiquidityParamsTrimmed(
@@ -531,7 +542,7 @@ describe('Test', () => {
                         new NotificationDataSingle(
                             notificationAddress,
                             toNano(1) / 8n,
-                            beginCell().storeUint(1234, 32).endCell()
+                            notification
                         ),
                         null
                     )
@@ -553,7 +564,7 @@ describe('Test', () => {
                     to: resolvedNotificationAddress,
                     success: true,
                     exitCode: 0,
-                    body: beginCell().storeUint(1234, 32).endCell()
+                    body: encapsulate(notification)
                 }
             )
         } else {
@@ -569,7 +580,7 @@ describe('Test', () => {
                         .storeUint(0, 64)
                         .storeCoins(toNano(1))
                         .storeAddress(pool.address)
-                        .storeMaybeRef(beginCell().storeUint(1234, 32).endCell())
+                        .storeMaybeRef(encapsulate(notification))
                         .endCell()
                 }
             )
@@ -640,6 +651,7 @@ describe('Test', () => {
                 )
             )
         )
+        const notification = beginCell().storeUint(12345, 64).endCell()
         let txs = await depositLiquidity(user, resolveVault(t2), 1_000n,
             new DepositLiquidityParams(
                 new DepositLiquidityParamsTrimmed(
@@ -652,7 +664,7 @@ describe('Test', () => {
                         new NotificationDataSingle(
                             notificationAddress,
                             toNano(1) / 8n,
-                            beginCell().storeUint(12345, 32).endCell()
+                            notification
                         )
                     )
                 ),
@@ -669,13 +681,13 @@ describe('Test', () => {
         await validateBadResponseFromVault(txs.transactions,
             t1,
             1_000n,
-            beginCell().storeUint(12345, 32).endCell(),
+            encapsulate(notification),
             resolvedNotificationAddress
         )
         await validateBadResponseFromVault(txs.transactions,
             t2,
             1_000n,
-            beginCell().storeUint(12345, 32).endCell(),
+            encapsulate(notification),
             resolvedNotificationAddress)
     });
 
@@ -743,6 +755,7 @@ describe('Test', () => {
                 )
             )
         )
+        const notification = beginCell().storeUint(12345, 128).endCell()
         let txs = await depositLiquidity(user, resolveVault(t2), 1_000n,
             new DepositLiquidityParams(
                 new DepositLiquidityParamsTrimmed(
@@ -755,7 +768,7 @@ describe('Test', () => {
                         new NotificationDataSingle(
                             notificationAddress,
                             toNano(1) / 8n,
-                            beginCell().storeUint(12345, 32).endCell()
+                            notification
                         )
                     )
                 ),
@@ -772,13 +785,13 @@ describe('Test', () => {
         await validateBadResponseFromVault(txs.transactions,
             t1,
             1_000n,
-            beginCell().storeUint(12345, 32).endCell(),
+            encapsulate(notification),
             resolvedNotificationAddress
         )
         await validateBadResponseFromVault(txs.transactions,
             t2,
             1_000n,
-            beginCell().storeUint(12345, 32).endCell(),
+            encapsulate(notification),
             resolvedNotificationAddress)
     });
 
@@ -829,6 +842,7 @@ describe('Test', () => {
             poolParams,
             null
         );
+        const notification = beginCell().storeUint(1234, 32).endCell()
         let txs = await createPool(user,
             resolveVault(t2),
             toNano(1),
@@ -838,7 +852,7 @@ describe('Test', () => {
                 new NotificationDataSingle(
                     notificationAddress,
                     toNano(1) / 8n,
-                    beginCell().storeUint(1234, 32).endCell()
+                    notification
                 )
             )
         )
@@ -846,13 +860,13 @@ describe('Test', () => {
         await validateBadResponseFromVault(txs.transactions,
             t1,
             toNano(1),
-            beginCell().storeUint(1234, 32).endCell(),
+            encapsulate(notification),
             resolvedNotificationAddress
         )
         await validateBadResponseFromVault(txs.transactions,
             t2,
             toNano(1),
-            beginCell().storeUint(1234, 32).endCell(),
+            encapsulate(notification),
             resolvedNotificationAddress)
 
         expect((await pool.getJettonData()).totalSupply).toBe(toNano(1));

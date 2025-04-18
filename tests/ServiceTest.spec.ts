@@ -575,6 +575,17 @@ describe('Test', () => {
         expect(beforePoolData.totalSupply).toBeGreaterThan(0n);
 
         let expectedLp = await pool.getEstimateLiquidityDepositAmount(toNano(1), toNano(1));
+        const notification = beginCell()
+            .storeAddress(admin.address)
+            .storeAddress(vaultA.address)
+            .storeAddress(vaultB.address)
+            .storeUint(100500, 200)
+            .storeRef(
+                beginCell()
+                    .storeUint(0, 2)
+                    .endCell()
+            )
+            .endCell()
 
         // 178D4519000000000000000043B9ACA008002557BBB945D246A58F4C1A14AD8A350229606AA709B3305D75569CFAC53578BD0005F6D40E1F230EE15F58E6463BC94F40D7EC7FC5508B63D9DB82056B4AE1AC8481_
         let f = await depositLiquidity(admin, vaultA, toNano(1), new DepositLiquidityParams(
@@ -586,8 +597,8 @@ describe('Test', () => {
                 new NotificationData(
                     new NotificationDataSingle(
                         admin.address,
-                        0n,
-                        beginCell().endCell()
+                        toNano(.05),
+                        notification
                     ),
                     null
                 )
@@ -610,8 +621,8 @@ describe('Test', () => {
                 new NotificationData(
                     new NotificationDataSingle(
                         admin.address,
-                        toNano('0.01'),
-                        beginCell().endCell()
+                        toNano(.05),
+                        notification
                     ),
                     null
                 )
@@ -647,8 +658,14 @@ describe('Test', () => {
                     .storeCoins(expectedLp.lpAmount)
                     .storeAddress(pool.address)
                     .storeAddress(admin.address)
-                    .storeCoins(toNano('0.01'))
-                    .storeMaybeRef(beginCell().endCell())
+                    .storeCoins(toNano(.05))
+                    .storeMaybeRef(
+                        beginCell()
+                            .storeUint(0xc0ffee36, 32)
+                            .storeUint(0, 64)
+                            .storeRef(notification)
+                            .endCell()
+                    )
                     .endCell()
             }
         );
