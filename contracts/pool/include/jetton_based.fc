@@ -419,6 +419,7 @@
     cell custom_payload = in_msg_body~load_maybe_ref();
     cell on_success = null();
 
+    slice failure_lp_address = sender_address;
     slice failure_address = from_address;
     slice success_address = from_address;
     ifnot (is_address_none(response_address)) {
@@ -439,6 +440,8 @@
         slice params = custom_payload.begin_parse();
         if (params~load_int(1)) {
             failure_address = success_address;
+            cell state_init = gen_lp_wallet_state_init(success_address, my_address(), storage::lp_wallet_code);
+            failure_lp_address = construct_address(BASECHAIN, cell_hash(state_init));
         }
         int deadline = params~load_uint(32);
         if (deadline < now()) {
@@ -484,7 +487,7 @@
     ifnot (excno == 0) {
         reserve_for_carry_inbound_without_value();
         send_cell_carry_inbound(
-            sender_address,
+            failure_lp_address,
             begin_cell()
                 .store_uint(opcodes::internal_transfer, 32)
                 .store_uint(query_id, 64)
