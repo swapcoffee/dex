@@ -3,6 +3,7 @@ import { NetworkProvider } from '@ton/blueprint';
 import { waitSeqNoChange } from './utils';
 import { compileCodes } from '../tests/utils';
 import { buildDataCell, Factory } from '../wrappers/Factory';
+import { Asset } from '../wrappers/types';
 
 export async function run(provider: NetworkProvider) {
     const ui = provider.ui();
@@ -62,7 +63,20 @@ export async function run(provider: NetworkProvider) {
                     await factory.sendUpdateContract(provider.sender(), toNano(0.1), nextAddress, codeCell, null);
                 });
             } else if (contractType == 1) {
-                throw Error('Plz implement pool modification');
+                Asset.fromSlice(initDataS);
+                Asset.fromSlice(initDataS);
+                let amm = initDataS.loadUint(3);
+                let codeCell;
+                if (amm == 0) {
+                    codeCell = compiled.poolConstantProduct;
+                } else if (amm == 1) {
+                    codeCell = compiled.poolCurveFiStable;
+                } else {
+                    throw new Error('Unknown amm');
+                }
+                await waitSeqNoChange(provider, deployer, async () => {
+                    await factory.sendUpdateContract(provider.sender(), toNano(0.1), nextAddress, codeCell, null);
+                });
             } else if (contractType == 2) {
                 throw Error('Plz implement liquidity_depository modification');
             } else if (contractType == 3) {

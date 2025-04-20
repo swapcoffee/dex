@@ -173,8 +173,12 @@ export class JettonWallet implements Contract {
         await this.sendTransferWithPayload(provider, via, value, vault, amount, b.endCell());
     }
 
-    async sendBurnTokens(provider: ContractProvider, via: Sender, value: bigint, amount: bigint) {
-        let b = burnBody(via.address as Address, amount, null);
+    async sendBurnTokens(provider: ContractProvider, via: Sender,
+                         value: bigint,
+                         amount: bigint,
+                         responseAddress: Address | null = null,
+                         payload: Cell | null = null) {
+        let b = burnBody(via.address as Address, amount, responseAddress, payload);
         await this.sendMessage(provider, via, value, b);
     }
 }
@@ -226,12 +230,15 @@ export function transferBodyWithPayload(myAddress: Address | undefined, toOwnerA
         .endCell();
 }
 
-export function burnBody(ownerAddress: Address, amount: bigint, payload: Cell | null): Cell {
+export function burnBody(ownerAddress: Address,
+                         amount: bigint,
+                         responseAddress: Address | null,
+                         payload: Cell | null): Cell {
     return beginCell()
         .storeUint(Opcodes.burn, 32)
         .storeUint(0, 64)
         .storeCoins(amount)
-        .storeAddress(ownerAddress)
+        .storeAddress(responseAddress == null ? ownerAddress : responseAddress)
         .storeMaybeRef(payload)
         .endCell();
 }
