@@ -153,8 +153,8 @@ const int opcodes::withdraw = 0xc0ffee43;
 ;; withdraw_internal#c0ffee2d query_id:uint64 asset:Asset amount:Coins receiver:MsgAddressInt = WithdrawInternal;
 const int opcodes::withdraw_internal = 0xc0ffee2d;
 ;; admin -> factory
-;; update_code_cell#c0ffee44 query_id:uint64 code_cell:^Cell = UpdateCodeCell;
-const int opcodes::update_code_cell = 0xc0ffee44;
+;; update_code_cell#c0ffee44 query_id:uint64 first:^Cell second:^Cell = UpdateCodeCells;
+const int opcodes::update_code_cells = 0xc0ffee44;
 ;; admin -> factory
 ;; update_contract#c0ffee45 query_id:uint64 contract_address:MsgAddressInt _:ContractUpdate = UpdateContract;
 const int opcodes::update_contract = 0xc0ffee45;
