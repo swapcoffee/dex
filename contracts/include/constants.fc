@@ -131,6 +131,9 @@ const int opcodes::create_vault_internal = 0xc0ffee2a;
 ;; user -> liquidity_depository / pool_creator
 ;; withdraw_deposit#c0ffee07 query_id:uint64 = WithdrawDeposit;
 const int opcodes::withdraw_deposit = 0xc0ffee07;
+;; pool/vault -> user
+;; notification#c0ffee36 query_id:uint64 body:^Cell = Notification;
+const int opcodes::notification = 0xc0ffee36;
 ;; admin -> factory
 ;; update_admin#c0ffee40 query_id:uint64 address:MsgAddressInt = UpdateAdmin;
 const int opcodes::update_admin = 0xc0ffee40;

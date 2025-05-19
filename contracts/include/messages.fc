@@ -57,6 +57,18 @@ max coins = 1329227995784915872903807060280344575
 }
 
 ;; at most 519 bits
+() send_builder_with_value(slice destination, builder body, int value) impure inline {
+    cell msg = begin_cell()
+        .store_uint(NON_BOUNCEABLE, 6)
+        .store_slice(destination)
+        .store_coins(value)
+        .store_uint(0, 107)
+        .store_builder(body)
+        .end_cell();
+    send_raw_message(msg, SEND_MODE_REGULAR);
+}
+
+;; at most 519 bits
 () send_builder(slice destination, builder body, int mode) impure inline {
     cell msg = begin_cell()
         .store_uint(NON_BOUNCEABLE, 6)

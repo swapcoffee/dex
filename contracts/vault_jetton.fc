@@ -222,17 +222,21 @@ global slice storage::jetton_wallet_address;
         int amount = in_msg_body~load_coins();
         cell notification_data = in_msg_body~load_maybe_ref();
         slice notification_receiver = recipient;
-        cell notification = null();
+        builder notification = null();
         int notification_fwd_gas = 0;
         ifnot (cell_null?(notification_data)) {
             slice s = notification_data.begin_parse();
             notification_receiver = s~load_msg_addr();
-            notification = s~load_ref();
             notification_fwd_gas = s~load_coins();
+            cell original_notification = s~load_ref();
+            notification = begin_cell()
+                .store_uint(opcodes::notification, 32)
+                .store_uint(query_id, 64)
+                .store_ref(original_notification);
         }
 
         verify_proof(storage::factory_address, storage::init_code_cell, sender_address, in_msg_body~load_maybe_ref());
-        if (cell_null?(notification)) {
+        if (null?(notification)) {
             send_cell_carry_inbound(
                 storage::jetton_wallet_address,
                 begin_cell()
@@ -257,14 +261,14 @@ global slice storage::jetton_wallet_address;
                     .store_slice(recipient)
                     .store_uint(0, 1)
                     .store_coins(notification_fwd_gas)
-                    .store_maybe_ref(notification)
+                    .store_maybe_ref(notification.end_cell())
                     .end_cell()
             );
         } else {
-            send_cell(
+            send_builder_with_value(
                 notification_receiver,
-                notification_fwd_gas,
-                notification
+                notification,
+                notification_fwd_gas
             );
             send_cell_carry_inbound(
                 storage::jetton_wallet_address,
