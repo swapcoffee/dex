@@ -1,5 +1,6 @@
 #include "storage.fc";
 #include "../../include/commons.fc";
+#include "../../include/constants.fc";
 #include "../../include/gas.fc";
 #include "../../include/reservation.fc";
 
@@ -163,7 +164,7 @@ int get_direction_from_proof(slice cs, slice previous_asset_hint) inline {
     if (flags & 1) {
         protocol_fee = params_cs~load_uint(16);
         lp_fee = params_cs~load_uint(16);
-        throw_unless(errors::invalid_fee, (protocol_fee <= fee::max_nominator) | (lp_fee <= fee::max_nominator));
+        throw_unless(errors::invalid_fee, (protocol_fee <= fee::max_nominator) & (lp_fee <= fee::max_nominator));
     }
     int is_active = storage::is_active;
     if (flags & 2) {
