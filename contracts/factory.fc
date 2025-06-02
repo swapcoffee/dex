@@ -54,12 +54,17 @@ global cell storage::pool_creator_code_cell;
     );
 }
 
-() update_code_cell(cell code_cell) impure inline {
+() update_code_cells(cell first, cell second) impure inline {
+    throw_unless(
+        errors::unexpected,
+        (slice_refs(first.begin_parse()) == 4) & (slice_refs(second.begin_parse()) == 2)
+    );
     set_data(
         begin_cell()
             .store_slice(storage::admin_address)
             .store_slice(storage::withdrawer_address)
-            .store_ref(code_cell)
+            .store_ref(first)
+            .store_ref(second)
             .end_cell()
     );
 }
@@ -292,9 +297,9 @@ global cell storage::pool_creator_code_cell;
                 .store_uint(query_id, 64),
             SEND_MODE_CARRY_ALL_BALANCE
         );
-    } elseif (opcode == opcodes::update_code_cell) {
+    } elseif (opcode == opcodes::update_code_cells) {
         throw_unless(errors::not_an_admin, equal_slice_bits(storage::admin_address, sender_address));
-        update_code_cell(in_msg_body~load_ref());
+        update_code_cells(in_msg_body~load_ref(), in_msg_body~load_ref());
         send_builder(
             sender_address,
             begin_cell()
@@ -433,8 +438,7 @@ slice get_admin_address() method_id {
     return storage::admin_address;
 }
 
-cell get_code() method_id {
+(cell, cell) get_code() method_id {
     slice cs = get_data().begin_parse();
-    cs~load_msg_addr();
-    return cs~load_ref();
+    return (cs~load_ref(), cs~load_ref());
 }

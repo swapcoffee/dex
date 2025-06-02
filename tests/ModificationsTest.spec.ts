@@ -178,7 +178,12 @@ describe('Test', () => {
     });
 
     it('factory update code cell, by non admin, fail', async () => {
-        let txs = await factory.sendUpdateCodeCell(user.getSender(), toNano(1), beginCell().storeUint(1, 1).endCell())
+        let txs = await factory.sendUpdateCodeCells(
+            user.getSender(),
+            toNano(1),
+            beginCell().storeUint(1, 1).endCell(),
+            beginCell().storeUint(1, 1).endCell()
+        )
         expect(txs.transactions).toHaveTransaction({
             from: user.address,
             to: factory.address,
@@ -187,8 +192,39 @@ describe('Test', () => {
         })
     });
 
+    it('factory update code cell, by admin, fail (format)', async () => {
+        let txs = await factory.sendUpdateCodeCells(
+            admin.getSender(),
+            toNano(1),
+            beginCell().storeUint(1, 1).endCell(),
+            beginCell().storeUint(1, 1).endCell()
+        )
+        expect(txs.transactions).toHaveTransaction({
+            from: admin.address,
+            to: factory.address,
+            success: false,
+            exitCode: 250
+        })
+    });
+
     it('factory update code cell, by admin, ok', async () => {
-        let txs = await factory.sendUpdateCodeCell(admin.getSender(), toNano(1), beginCell().storeUint(1, 1).endCell())
+        const dummy = beginCell().storeUint(1, 1).endCell()
+        const first = beginCell()
+            .storeRef(dummy)
+            .storeRef(dummy)
+            .storeRef(dummy)
+            .storeRef(dummy)
+            .endCell()
+        const second = beginCell()
+            .storeRef(dummy)
+            .storeRef(dummy)
+            .endCell()
+        let txs = await factory.sendUpdateCodeCells(
+            admin.getSender(),
+            toNano(1),
+            first,
+            second
+        )
         expect(txs.transactions).toHaveTransaction({
             from: admin.address,
             to: factory.address,
@@ -196,10 +232,9 @@ describe('Test', () => {
             exitCode: 0
         })
 
-        let newCode = await factory.getCode();
-        expect(newCode.toString()).toBe(
-            beginCell().storeUint(1, 1).endCell().toString()
-        );
+        const newCode = await factory.getCode()
+        expect(newCode[0].toString()).toBe(first.toString())
+        expect(newCode[1].toString()).toBe(second.toString())
     });
 
     it('factory update self code and data, by non admin, fail', async () => {

@@ -84,12 +84,17 @@ export class Factory implements Contract {
         );
     }
 
-    async sendUpdateCodeCell(provider: ContractProvider, via: Sender, value: bigint, code: Cell) {
+    async sendUpdateCodeCells(provider: ContractProvider, via: Sender, value: bigint, first: Cell, second: Cell) {
         return await this.sendMessage(
             provider,
             via,
             value,
-            beginCell().storeUint(0xc0ffee44, 32).storeUint(0, 64).storeRef(code).endCell(),
+            beginCell()
+                .storeUint(0xc0ffee44, 32)
+                .storeUint(0, 64)
+                .storeRef(first)
+                .storeRef(second)
+                .endCell()
         );
     }
 
@@ -184,7 +189,7 @@ export class Factory implements Contract {
 
     async getCode(provider: ContractProvider) {
         let res = await provider.get('get_code', []);
-        return res.stack.readCell();
+        return [res.stack.readCell(), res.stack.readCell()];
     }
 
     async getPoolAddress(
