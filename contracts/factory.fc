@@ -201,6 +201,13 @@ global cell storage::pool_creator_code_cell;
         cell state_init = gen_contract_state_init(storage::init_code_cell, init_data);
         int destination_hash = cell_hash(state_init);
 
+        int default_protocol_fee = 1000; ;; 0.1%
+        int default_lp_fee = 2000; ;; 0.2%
+        if (amm == amm::curve_fi_stable) {
+            default_protocol_fee = 100; ;; 0.01%
+            default_lp_fee = 400; ;; 0.04%
+        }
+
         send_hash_builder_init_carry_inbound(
             destination_hash,
             begin_cell()
@@ -215,8 +222,8 @@ global cell storage::pool_creator_code_cell;
                         .store_coins(0) ;; reserve1
                         .store_coins(0) ;; reserve2
                         .store_coins(0) ;; total supply
-                        .store_uint(200, 16) ;; 0.02% fee for protocol
-                        .store_uint(800, 16) ;; 0.08% fee for lp
+                        .store_uint(default_protocol_fee, 16)
+                        .store_uint(default_lp_fee, 16)
                         .store_coins(0) ;; collected protocol fee in asset1
                         .store_coins(0) ;; collected protocol fee int asset2
                         .store_ref(storage::lp_wallet_code_cell)
