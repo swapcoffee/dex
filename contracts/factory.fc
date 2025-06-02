@@ -98,6 +98,7 @@ global cell storage::pool_creator_code_cell;
         int is_active = creation_params_cs~load_uint(1);
         cell extra_settings = creation_params_cs~load_maybe_ref();
 
+        throw_if(errors::unknown_amm, cell_null?(storage::pool_code_dict.udict_get_ref(3, amm)));
         throw_unless(errors::not_an_admin, ((amm == amm::constant_product) & (is_active == 1) & cell_null?(extra_settings)) | equal_slice_bits(tx_initiator, storage::admin_address));
 
         slice proof_cs = verify_proof(my_address(), storage::init_code_cell, sender_address, proof);
