@@ -666,4 +666,73 @@ describe('Test', () => {
         await validateVaultPayout(txs.transactions, t2, 5_000n);
     });
 
+    test.each(testArguments)
+    ('create pool, fail to withdraw, lp went to another user, %i, %i', async (t1, t2) => {
+        await createPool(user,
+            resolveVault(t1),
+            toNano(1),
+            new PoolParams(
+                await resolveVault(t1).getAssetParsed(),
+                await resolveVault(t2).getAssetParsed(),
+                AMM.ConstantProduct
+            ),
+            null
+        );
+        await createPool(user,
+            resolveVault(t2),
+            toNano(1),
+            new PoolParams(
+                await resolveVault(t1).getAssetParsed(),
+                await resolveVault(t2).getAssetParsed(),
+                AMM.ConstantProduct
+            ),
+            new NotificationData(
+                null,
+                null
+            )
+        )
+        let pool = blockchain.openContract(
+            await factory.getPoolJettonBased(
+                await resolveVault(t1).getAssetParsed(),
+                await resolveVault(t2).getAssetParsed(),
+                AMM.ConstantProduct
+            )
+        );
+
+        // init pool
+        expect((await pool.getJettonData()).totalSupply).toBe(toNano(1));
+
+        let wallet = await getWallet(user.address, pool);
+
+        let wallet2 = await getWallet(admin.address, pool);
+
+        let txs = await wallet.sendBurnTokens(user.getSender(),
+            toNano('1.0'),
+            1_000n,
+            admin.address,
+            beginCell()
+                .storeUint(1, 1) // use on failure address
+                .storeUint(0, 32) // deadline
+                .storeUint(0, 2) // no condition
+                .storeUint(0, 2) // extra_settings, on_success
+                .endCell()
+            );
+        expect((await pool.getJettonData()).totalSupply).toBe(toNano(1));
+        expect((await getUserLp(user.address, pool))).toBe(toNano(1) - 1_000n - 1_000n);
+        expect((await getUserLp(admin.address, pool))).toBe(1_000n);
+
+        expect(txs.transactions).toHaveTransaction({
+            from: wallet.address,
+            to: pool.address,
+            success: true,
+            exitCode: 268
+        })
+
+        expect(txs.transactions).toHaveTransaction({
+            from: pool.address,
+            to: wallet2.address,
+            success: true,
+            exitCode: 0
+        })
+    });
 });

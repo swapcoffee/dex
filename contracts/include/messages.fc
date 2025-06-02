@@ -100,6 +100,17 @@ max coins = 1329227995784915872903807060280344575
     send_raw_message(msg, SEND_MODE_CARRY_ALL_BALANCE);
 }
 
+() send_cell_init_carry_inbound(slice destination, cell body, cell init) impure inline {
+     cell msg = begin_cell()
+        .store_uint(NON_BOUNCEABLE, 6)
+        .store_slice(destination)
+        .store_uint(7, 108 + store_coins_zero_bits)
+        .store_ref(init)
+        .store_ref(body)
+        .end_cell();
+    send_raw_message(msg, SEND_MODE_CARRY_ALL_BALANCE);
+}
+
 ;; at most 519 bits and 3 refs
 () send_builder_extra_carry_inbound(slice destination, int extra_id, int extra_amount, builder body) impure inline {
     cell extra_dict = new_dict();
