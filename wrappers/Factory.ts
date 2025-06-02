@@ -17,7 +17,7 @@ import { PoolConstantProduct } from './PoolConstantProduct';
 import { PoolCurveFiStable } from './PoolCurveFiStable';
 import { PoolJettonBased } from './PoolJettonBased';
 
-export function buildDataCell(admin: Address, withdrawer: Address, codeCells: CodeCells): Cell {
+export function buildDataCell(admin: Address, withdrawer: Address, codeCells: CodeCells, nonce: number = 0): Cell {
     const vaultCodeDict = Dictionary.empty(Dictionary.Keys.Uint(2), Dictionary.Values.Cell());
     vaultCodeDict.set(0, codeCells.vaultNative);
     vaultCodeDict.set(1, codeCells.vaultJetton);
@@ -37,6 +37,7 @@ export function buildDataCell(admin: Address, withdrawer: Address, codeCells: Co
                 .endCell(),
         )
         .storeRef(beginCell().storeDict(vaultCodeDict).storeDict(poolCodeDict).endCell())
+        .storeUint(nonce, 32)
         .endCell();
 }
 
@@ -50,8 +51,8 @@ export class Factory implements Contract {
         return new Factory(address);
     }
 
-    static createFromData(admin: Address, codeCells: CodeCells, withdrawer: Address = admin, workchain = 0) {
-        const data = buildDataCell(admin, withdrawer, codeCells);
+    static createFromData(admin: Address, codeCells: CodeCells, withdrawer: Address = admin, workchain = 0, nonce = 0) {
+        const data = buildDataCell(admin, withdrawer, codeCells, nonce);
         const init = { code: codeCells.factory, data };
         return new Factory(contractAddress(workchain, init), init);
     }
@@ -84,17 +85,21 @@ export class Factory implements Contract {
         );
     }
 
+    async sendUpdateWithdrawer(provider: ContractProvider, via: Sender, value: bigint, address: Address | null) {
+        return await this.sendMessage(
+            provider,
+            via,
+            value,
+            beginCell().storeUint(0xc0ffee46, 32).storeUint(0, 64).storeAddress(address).endCell(),
+        );
+    }
+
     async sendUpdateCodeCells(provider: ContractProvider, via: Sender, value: bigint, first: Cell, second: Cell) {
         return await this.sendMessage(
             provider,
             via,
             value,
-            beginCell()
-                .storeUint(0xc0ffee44, 32)
-                .storeUint(0, 64)
-                .storeRef(first)
-                .storeRef(second)
-                .endCell()
+            beginCell().storeUint(0xc0ffee44, 32).storeUint(0, 64).storeRef(first).storeRef(second).endCell(),
         );
     }
 
@@ -309,7 +314,7 @@ export class Factory implements Contract {
                 { type: 'slice', cell: beginCell().storeAddress(owner).endCell() },
                 { type: 'slice', cell: b1.endCell() },
                 { type: 'slice', cell: b2.endCell() },
-                { type: 'int', value: BigInt(amm) }
+                { type: 'int', value: BigInt(amm) },
             ]);
             return res.stack.readAddress();
         } else {

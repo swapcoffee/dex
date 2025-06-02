@@ -1,9 +1,9 @@
-import { Address, Cell, toNano } from '@ton/core';
+import { Address, beginCell, Cell, toNano } from '@ton/core';
 import { NetworkProvider } from '@ton/blueprint';
 import { waitSeqNoChange } from './utils';
 import { compileCodes } from '../tests/utils';
 import { buildDataCell, Factory } from '../wrappers/Factory';
-import { Asset } from '../wrappers/types';
+import { Asset, AssetNative } from '../wrappers/types';
 
 export async function run(provider: NetworkProvider) {
     const ui = provider.ui();
@@ -11,7 +11,7 @@ export async function run(provider: NetworkProvider) {
     let deployer = provider.sender().address as Address;
     console.log('admin:', deployer);
 
-    let factory = provider.open(Factory.createFromData(deployer, compiled, deployer));
+    let factory = provider.open(Factory.createFromData(deployer, compiled, deployer, 0, 239));
 
     console.log('Factory address:', factory.address.toRawString());
     let factoryAddress = await ui.inputAddress('Use either factory above, or custom address', factory.address);
@@ -22,7 +22,7 @@ export async function run(provider: NetworkProvider) {
         let nextAddress = await ui.inputAddress('Insert next address to update');
         if (nextAddress.toRawString() == factory.address.toRawString()) {
             console.log('Begin factory updating');
-            let dataCell = buildDataCell(deployer, deployer, compiled);
+            let dataCell = buildDataCell(deployer, Address.parse("UQBQwb1rPdTP0DtL6FgW2ilaeoPsXuUEb1dPD4ynq2WT_DEX"), compiled, 239);
             await waitSeqNoChange(provider, deployer, async () => {
                 await factory.sendUpdateContract(provider.sender(), toNano(0.1), null, compiled.factory, dataCell);
             });
