@@ -57,6 +57,18 @@ max coins = 1329227995784915872903807060280344575
 }
 
 ;; at most 519 bits
+() send_builder_with_value(slice destination, builder body, int value) impure inline {
+    cell msg = begin_cell()
+        .store_uint(NON_BOUNCEABLE, 6)
+        .store_slice(destination)
+        .store_coins(value)
+        .store_uint(0, 107)
+        .store_builder(body)
+        .end_cell();
+    send_raw_message(msg, SEND_MODE_REGULAR);
+}
+
+;; at most 519 bits
 () send_builder(slice destination, builder body, int mode) impure inline {
     cell msg = begin_cell()
         .store_uint(NON_BOUNCEABLE, 6)
@@ -94,22 +106,6 @@ max coins = 1329227995784915872903807060280344575
         .store_slice(destination)
         .store_uint(7, 108 + store_coins_zero_bits)
         .store_ref(init)
-        .store_ref(body)
-        .end_cell();
-    send_raw_message(msg, SEND_MODE_CARRY_ALL_BALANCE);
-}
-
-() send_cell_extra_carry_inbound(slice destination, int extra_id, int extra_amount, cell body) impure inline {
-    cell extra_dict = new_dict();
-    slice extra_amount_slice = begin_cell().store_extra(extra_amount).end_cell().begin_parse();
-    extra_dict~udict_set(32, extra_id, extra_amount_slice);
-
-    cell msg = begin_cell()
-        .store_uint(NON_BOUNCEABLE, 6)
-        .store_slice(destination)
-        .store_coins(0)
-        .store_dict(extra_dict)
-        .store_uint(1, 106)
         .store_ref(body)
         .end_cell();
     send_raw_message(msg, SEND_MODE_CARRY_ALL_BALANCE);
