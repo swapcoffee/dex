@@ -51,6 +51,34 @@ describe('Test', () => {
         nativeVault = await deployNativeVault(blockchain, factory, admin)
     }, DEFAULT_TIMEOUT);
 
+    it('pool_creator unknown amm, admin', async () => {
+        const jettonWallet1Admin = blockchain.openContract(
+            JettonWallet.createFromAddress(await jetton1.master.getWalletAddress(admin.address))
+        );
+        const txs = await jettonWallet1Admin.sendCreatePoolJetton(
+            admin.getSender(),
+            toNano(1.0),
+            jetton1.vault.address,
+            toNano(10.0),
+            admin.address,
+            PoolParams.fromAddress(
+                jetton1.master.address,
+                jetton2.master.address,
+                AMM.Unknown,
+                beginCell().endCell()
+            ),
+            null
+        );
+        expect(txs.transactions).toHaveTransaction(
+            {
+                from: jetton1.vault.address,
+                to: factory.address,
+                exitCode: 261,
+                success: false
+            }
+        );
+    });
+
     it('pool_creator jetton+jetton created/destroyed, admin', async () => {
         let jettonWallet1Admin = blockchain.openContract(
             JettonWallet.createFromAddress(await jetton1.master.getWalletAddress(admin.address))

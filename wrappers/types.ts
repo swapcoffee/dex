@@ -5,6 +5,7 @@ import { Address, beginCell, Builder, Cell, Slice } from '@ton/core';
 export enum AMM {
     ConstantProduct,
     CurveFiStable,
+    Unknown = 7
 }
 
 export enum FailReason {
