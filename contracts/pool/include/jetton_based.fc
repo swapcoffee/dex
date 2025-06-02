@@ -239,7 +239,7 @@
                     denominator,
                     storage::reserve1,
                     storage::reserve2
-                ) <= 0) | (compare_fractions(
+                ) <= 0) & (compare_fractions(
                     max_nominator,
                     denominator,
                     storage::reserve1,
@@ -468,7 +468,7 @@
                     denominator,
                     reserve1,
                     reserve2
-                ) <= 0) | (compare_fractions(
+                ) <= 0) & (compare_fractions(
                     max_nominator,
                     denominator,
                     reserve1,
