@@ -66,8 +66,8 @@
     cell notification_data_success = null();
     ifnot (cell_null?(notification_data)) {
         slice notification_data_cs = notification_data.begin_parse();
-        notification_data_failure = notification_data_cs~load_maybe_ref();
         notification_data_success = notification_data_cs~load_maybe_ref();
+        notification_data_failure = notification_data_cs~load_maybe_ref();
     }
 
     int direction = get_direction_from_proof(proof_slice, previous_asset_hint);
