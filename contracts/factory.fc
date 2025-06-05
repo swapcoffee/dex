@@ -375,15 +375,15 @@ global cell storage::pool_creator_code_cell;
         slice asset = in_msg_body~load_asset();
         int amount = in_msg_body~load_coins();
         slice receiver = in_msg_body~load_msg_addr();
-        send_builder(
+        send_cell_carry_inbound(
             pool_address,
             begin_cell()
                 .store_uint(opcodes::withdraw_internal, 32)
                 .store_uint(query_id, 64)
                 .store_slice(asset)
                 .store_coins(amount)
-                .store_slice(receiver),
-            SEND_MODE_CARRY_ALL_BALANCE
+                .store_slice(receiver)
+                .end_cell()
         );
     } else {
         throw(errors::unknown_opcode);
