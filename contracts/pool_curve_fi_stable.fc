@@ -1,3 +1,9 @@
+{-
+    This file is part of Coffee DEX
+    Licensed under the Business Source License 1.1
+    See the LICENSE file in the root of this repository.
+-}
+
 #include "pool/amm/curve_fi_stable.fc";
 #include "pool/include/jetton_based.fc";
 #include "pool/include/recv_internal.fc";

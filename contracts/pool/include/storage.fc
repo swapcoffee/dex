@@ -1,3 +1,9 @@
+{-
+    This file is part of Coffee DEX
+    Licensed under the Business Source License 1.1
+    See the LICENSE file in the root of this repository.
+-}
+
 #include "../../include/commons.fc";
 
 const int fee::max_nominator = 10000; ;; 10_000 <=> 1%

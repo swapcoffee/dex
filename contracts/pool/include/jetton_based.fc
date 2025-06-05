@@ -1,3 +1,9 @@
+{-
+    This file is part of Coffee DEX
+    Licensed under the Business Source License 1.1
+    See the LICENSE file in the root of this repository.
+-}
+
 #include "commons.fc";
 #include "storage.fc";
 #include "../../include/commons.fc";
