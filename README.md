@@ -1,6 +1,7 @@
 # Coffee Dex
 [![TON](https://img.shields.io/badge/based%20on-TON-blue)](https://ton.org/)
 [![License](https://img.shields.io/badge/license-BUSL--1.1-brightgreen)](./LICENSE)
+[![Security Audit](https://img.shields.io/badge/audited%20by-Trail%20of%20Bits-red?logo=2fas&logoColor=white)](https://github.com/trailofbits/publications/blob/master/reviews/2025-05-swap-coffee-ton-dex-securityreview.pdf)
 
 **Coffee DEX** is an open-source most powerful and extensible decentralized exchange **TON**-native protocol
 on the TON blockchain. We truly believe that it signifies new era of both user exchanges and market evolution overall,
