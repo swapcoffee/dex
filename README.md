@@ -25,6 +25,8 @@ questions regarding product's license, please contact us via Telegram [@swap.cof
 
 - `EQAsf2sDPfoo-0IjnRA7l_gJBB9jyo4zqfCG_1IFCCI_Qbef` is a factory.
 - `EQDbLqT_zhxpERj0EnXG2iqr1g71ODb_Xoc74R8RzUSElKGD` is a TON vault.
+- `UQCz79ULW8EogUnE-8vw2AmqYAQbAX3PcdlHV_VQ75zkKmcA` is a multisig administrative wallet.
+- `UQBQwb1rPdTP0DtL6FgW2ilaeoPsXuUEb1dPD4ynq2WT_DEX` is a wallet for protocol & referral fees withdrawals.
 
 ## Project structure
 
