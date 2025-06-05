@@ -1,7 +1,7 @@
 import { Address, toNano } from '@ton/core';
 import { NetworkProvider } from '@ton/blueprint';
 import { compileCodes } from '../tests/utils';
-import { Factory } from '../wrappers/Factory';
+import { buildDataCell, Factory } from '../wrappers/Factory';
 
 export async function run(provider: NetworkProvider) {
     let compiled = await compileCodes();
@@ -9,7 +9,7 @@ export async function run(provider: NetworkProvider) {
     let deployer = provider.sender().address as Address;
     console.log('admin:', deployer);
 
-    let factory = provider.open(Factory.createFromData(deployer, compiled, deployer));
+    let factory = provider.open(Factory.createFromData(deployer, compiled, deployer, 0, 239));
     if (await provider.isContractDeployed(factory.address)) {
         console.log('factory already deployed, address =', factory.address.toRawString());
         return;

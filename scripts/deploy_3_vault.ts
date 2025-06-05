@@ -11,7 +11,7 @@ export async function run(provider: NetworkProvider) {
     let deployer = provider.sender().address as Address;
     console.log('admin:', deployer);
 
-    let factory = provider.open(Factory.createFromData(deployer, compiled, deployer));
+    let factory = provider.open(Factory.createFromData(deployer, compiled, deployer, 0, 239));
     const ui = provider.ui();
     console.log('Factory address:', factory.address.toRawString());
 

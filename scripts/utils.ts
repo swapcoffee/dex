@@ -1,16 +1,13 @@
 import {NetworkProvider, sleep, UIProvider} from "@ton/blueprint";
 import {Address, Cell, Dictionary} from "@ton/core";
-import {TonClient, TonClient4} from "@ton/ton";
 import {JettonMaster} from "../wrappers/Jetton";
-import {compileMany} from "../tests/utils";
 
 export const NATIVE_ADDRESS = Address.parse("EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c");
 
 export async function getSeqNo(provider: NetworkProvider, address: Address) {
     if (await provider.isContractDeployed(address)) {
-        let api = provider.api() as TonClient;
-        let res = await api.runMethod(address, 'seqno');
-        return res.stack.readNumber();
+        const { stack } = await provider.provider(address).get('seqno', [])
+        return stack.readNumber();
     } else {
         return 0;
     }
