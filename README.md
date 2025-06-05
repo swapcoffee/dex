@@ -35,6 +35,9 @@ questions regarding product's license, please contact us via Telegram [@swap.cof
 -   `tests` - tests for the contracts.
 -   `scripts` - scripts used by the project, mainly the deployment scripts.
 
+Detailed documentation with a description of the architecture, illustrations of user flows, TL-B schemes explanations
+and lots of other useful information is available at the [link](https://docs.swap.coffee/technical-guides/dex).
+
 ## How to use
 
 ### Build
