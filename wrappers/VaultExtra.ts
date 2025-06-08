@@ -53,13 +53,21 @@ export class VaultExtra implements Contract {
         )
     }
 
+    // TODO: add extra currencies
     async sendCreatePoolExtraFromParams(provider: ContractProvider, via: Sender, value: bigint, params: PoolParams, creation_params: PoolCreationParams) {
+        await this.sendMessage(provider, via, value, this.buildCreatePoolExtraFromParams(params, creation_params));
+    }
+
+    buildCreatePoolExtraFromParams(
+        params: PoolParams,
+        creation_params: PoolCreationParams
+    ): Cell {
         const b = beginCell()
             .storeUint(0xc0ffee03, 32)
             .storeUint(0, 64)
         params.write(b)
         creation_params.write(b)
-        await this.sendMessage(provider, via, value, b.endCell());
+        return b.endCell()
     }
 
     // TODO: add extra currencies

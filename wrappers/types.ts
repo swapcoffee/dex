@@ -81,6 +81,16 @@ export class AssetJetton extends Asset {
     public write(b: Builder): void {
         b.storeUint(1, 2).storeUint(this.chain, 8).storeUint(this.hash, 256);
     }
+
+    public getAddress(): Address {
+        return beginCell()
+            .storeUint(4, 3)
+            .storeUint(this.chain, 8)
+            .storeUint(this.hash, 256)
+            .endCell()
+            .beginParse()
+            .loadAddress()
+    }
 }
 
 export class AssetExtra extends Asset {

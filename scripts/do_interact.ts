@@ -1,15 +1,26 @@
 import { NetworkProvider } from '@ton/blueprint';
-import { Address, beginCell, Cell, internal, SenderArguments, toNano } from '@ton/core';
+import { Address, beginCell, Cell, OpenedContract, SenderArguments, toNano } from '@ton/core';
 import { buildFirstFactoryCodeCell, buildSecondFactoryCodeCell, Factory } from '../wrappers/Factory';
-import { AMM, Asset, AssetExtra, AssetJetton, AssetNative, PoolParams } from '../wrappers/types';
+import {
+    AMM,
+    Asset,
+    AssetExtra,
+    AssetJetton,
+    AssetNative,
+    PoolCreationParams,
+    PoolParams, PrivatePoolCreationParams,
+    PublicPoolCreationParams
+} from '../wrappers/types';
 import { CodeCells, compileCodes } from '../tests/utils';
 import { proposeMultisigMessages } from '../wrappers/multisig';
 import { waitSeqNoChange } from './utils';
 import { VaultJetton } from '../wrappers/VaultJetton';
-import { JettonMaster } from '../wrappers/Jetton';
-import { WalletContractV4 } from '@ton/ton';
+import { JettonMaster, JettonWallet, transferBodyWithPayload } from '../wrappers/Jetton';
+import { VaultNative } from '../wrappers/VaultNative';
+import { VaultExtra } from '../wrappers/VaultExtra';
 
 enum COMMANDS {
+    DEPLOY_POOL,
     ACTIVATE_VAULT,
     UPDATE_POOL,
     UPDATE_CONTRACT,
@@ -40,13 +51,117 @@ export async function run(provider: NetworkProvider) {
     } else {
         console.log('You are the admin of that factory!')
     }
-    const command = await ui.choose("Select command:",
-        Object.values(COMMANDS).filter(it => typeof(it) === 'number').map(it => it as number),
-        (x) => COMMANDS[x].toString()
-    )
+    async function selectCommand() {
+        return await ui.choose(
+            'Select command',
+            Object.values(COMMANDS).filter(it => typeof(it) === 'number').map(it => it as number),
+            (x) => COMMANDS[x].toString()
+        )
+    }
+    let command = await selectCommand()
 
     let actions: SenderArguments[] = []
     while (true) {
+        if (command == COMMANDS.DEPLOY_POOL) {
+            const amm = await ui.choose(
+                'Select AMM',
+                Object.values(AMM).filter(it => typeof(it) === 'number').map(it => it as number),
+                (x) => AMM[x].toString()
+            )
+            let ammSettingsParser: () => Promise<Cell | null>
+            let extraSettingsParser: () => Promise<Cell | null>
+            if (amm == AMM.ConstantProduct) {
+                ammSettingsParser = async () => null
+                extraSettingsParser = async () => null
+            } else if (amm == AMM.CurveFiStable) {
+                ammSettingsParser = async () => {
+                    const amplification = BigInt(await ui.input('Enter amplification'))
+                    const firstAssetWeight = BigInt(await ui.input('Enter 1st asset weight'))
+                    const secondAssetWeight = BigInt(await ui.input('Enter 2nd asset weight'))
+                    return beginCell()
+                        .storeUint(amplification, 16)
+                        .storeCoins(firstAssetWeight)
+                        .storeCoins(secondAssetWeight)
+                        .endCell()
+                }
+                extraSettingsParser = async () => null
+            } else {
+                throw new Error('Unknown AMM')
+            }
+            const firstAsset = parseAsset(
+                await ui.input('Enter 1st asset (empty for TON, address for jetton, number for extra)')
+            )
+            const firstAssetVaultAddress = await factory.getVaultAddress(firstAsset)
+            const firstAssetVault = openVault(provider, firstAsset, firstAssetVaultAddress)
+            if ((await firstAssetVault.getIsActive()) == 0n) {
+                throw new Error('Vault for 1st asset is not active')
+            }
+            const secondAsset = parseAsset(
+                await ui.input('Enter 2nd asset (empty for TON, address for jetton, number for extra)')
+            )
+            const secondAssetVaultAddress = await factory.getVaultAddress(secondAsset)
+            const secondAssetVault = openVault(provider, secondAsset, secondAssetVaultAddress)
+            if ((await secondAssetVault.getIsActive()) == 0n) {
+                throw new Error('Vault for 2nd asset is not active')
+            }
+            const ammSettings = await ammSettingsParser()
+            const extraSettings = await extraSettingsParser()
+            const firstAssetAmount = BigInt(await ui.input('Enter 1st asset raw amount'))
+            const secondAssetAmount = BigInt(await ui.input('Enter 2nd asset raw amount'))
+            const isActive = parseYesNo(
+                await ui.input('Should pool be active from the beginning ("y" / "n")?')
+            )
+            const recipient = await ui.inputAddress(
+                'Enter recipient of LP tokens (leave empty for factory admin)',
+                factoryAdminAddress
+            )
+            const poolParams = new PoolParams(firstAsset, secondAsset, amm, ammSettings)
+            const creationParams = new PoolCreationParams(
+                new PublicPoolCreationParams(recipient),
+                new PrivatePoolCreationParams(isActive, extraSettings)
+            )
+            async function buildTx(asset: Asset, amount: bigint, vaultRaw: any): Promise<SenderArguments> {
+                if (asset instanceof AssetNative) {
+                    const vault = vaultRaw as VaultNative
+                    return {
+                        to: vault.address,
+                        value: toNano(.1),
+                        body: vault.buildCreatePoolNativeFromParams(amount, poolParams, creationParams)
+                    }
+                } else if (asset instanceof AssetJetton) {
+                    const vault = vaultRaw as VaultJetton
+                    const jettonMaster = provider.open(JettonMaster.createFromAddress(asset.getAddress()))
+                    const jettonWalletAddress = await jettonMaster.getWalletAddress(factoryAdminAddress)
+                    const jettonWallet = provider.open(JettonWallet.createFromAddress(jettonWalletAddress))
+                    return {
+                        to: jettonWalletAddress,
+                        value: toNano(.15),
+                        body: transferBodyWithPayload(
+                            factoryAdminAddress,
+                            vault.address,
+                            amount,
+                            toNano(.1),
+                            jettonWallet.buildCreatePoolJettonFromParams(poolParams, creationParams)
+                        )
+                    }
+                } else if (asset instanceof AssetExtra) {
+                    const vault = vaultRaw as VaultExtra
+                    return {
+                        to: vault.address,
+                        value: toNano(.1),
+                        extracurrency: {
+                            [Number(asset.id)]: amount
+                        },
+                        body: vault.buildCreatePoolExtraFromParams(poolParams, creationParams)
+                    }
+                } else {
+                    throw new Error('Unknown asset type')
+                }
+            }
+            actions.push(await buildTx(firstAsset, firstAssetAmount, firstAssetVault))
+            actions.push(await buildTx(secondAsset, secondAssetAmount, secondAssetVault))
+            break
+        }
         if (command == COMMANDS.ACTIVATE_VAULT) {
             const jettonMasterAddress = await ui.inputAddress('Enter jetton (master) address')
             const vaultAddress = await factory.getVaultAddress(jettonMasterAddress)
@@ -129,15 +244,18 @@ export async function run(provider: NetworkProvider) {
                 if (currentFactoryAddress.toRawString() !== factoryAddress.toRawString()) {
                     throw new Error('Target is of another factory: ' + currentFactoryAddress.toRawString())
                 }
+                let contractName, codeCell
                 const contractType = initDataS.loadUint(2)
                 if (contractType == 0) {
                     const vaultType = initDataS.loadUint(2)
-                    let codeCell
                     if (vaultType == 0) {
+                        contractName = 'Native vault'
                         codeCell = compiled.vaultNative
                     } else if (vaultType == 1) {
+                        contractName = 'Jetton vault'
                         codeCell = compiled.vaultJetton
                     } else if (vaultType == 2) {
+                        contractName = 'Extra vault'
                         codeCell = compiled.vaultExtra
                     } else {
                         throw new Error('Unknown vault type: ' + vaultType)
@@ -148,11 +266,14 @@ export async function run(provider: NetworkProvider) {
                         body: factory.buildUpdateContract(targetAddress, codeCell, null)
                     })
                 } else if (contractType == 1) {
+                    Asset.fromSlice(initDataS)
+                    Asset.fromSlice(initDataS)
                     const amm = initDataS.loadUint(3)
-                    let codeCell
                     if (amm == 0) {
+                        contractName = 'ConstantProduct pool'
                         codeCell = compiled.poolConstantProduct
                     } else if (amm == 1) {
+                        contractName = 'CurveFiStable pool'
                         codeCell = compiled.poolCurveFiStable
                     } else {
                         throw new Error('Unknown amm: ' + amm)
@@ -165,6 +286,13 @@ export async function run(provider: NetworkProvider) {
                 } else {
                     throw new Error('Unsupported contract type: ' + contractType)
                 }
+                console.log(
+                    contractName,
+                    'code cell will be changed from',
+                    Cell.fromBoc(state.state.code as Buffer)[0].hash().toString('hex'),
+                    'to',
+                    codeCell.hash().toString('hex')
+                )
             }
             if (parseYesNo(await ui.input('Do you want to update more contracts ("y" / "n")?'))) {
                 continue
@@ -174,14 +302,29 @@ export async function run(provider: NetworkProvider) {
         }
         if (command == COMMANDS.UPDATE_CODE_CELLS) {
             const compiled = await getCompiledCodes()
+            const old = await factory.getCode()
             const first = buildFirstFactoryCodeCell(compiled)
+            if (old[0].hash().toString('hex') !== first.hash().toString('hex')) {
+                throw new Error('First code cell must be preserved!')
+            }
             const second = buildSecondFactoryCodeCell(compiled)
             actions.push({
                 to: factoryAddress,
                 value: toNano(.05),
                 body: factory.buildUpdateCodeCells(first, second)
             })
-            break
+            console.log(
+                'Second code cell will be changed from',
+                old[1].hash().toString('hex'),
+                'to',
+                second.hash().toString('hex')
+            )
+            if (parseYesNo(await ui.input('Do you want to do something else ("y" / "n")?'))) {
+                command = await selectCommand()
+                continue
+            } else {
+                break
+            }
         }
         if (command == COMMANDS.UPDATE_ADMIN) {
             const adminAddress = await ui.inputAddress('Enter new admin address')
@@ -234,6 +377,16 @@ async function getCompiledCodes(): Promise<CodeCells> {
         compiledCode = await compileCodes()
     }
     return compiledCode
+}
+
+function openVault(provider: NetworkProvider, asset: Asset, address: Address): OpenedContract<VaultNative | VaultJetton | VaultExtra> {
+    if (asset instanceof AssetNative) {
+        return provider.open(VaultNative.createFromAddress(address))
+    } else if (asset instanceof AssetJetton) {
+        return provider.open(VaultJetton.createFromAddress(address))
+    } else {
+        return provider.open(VaultExtra.createFromAddress(address))
+    }
 }
 
 function parseYesNo(input: string): boolean {

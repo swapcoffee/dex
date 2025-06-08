@@ -19,7 +19,6 @@ export async function proposeMultisigMessages(
     provider: NetworkProvider,
     multisigAddress: Address,
     args: SenderArguments | SenderArguments[],
-    value: bigint = toNano(.05),
     timeout: number = 3600
 ) {
     const sender = provider.sender()
@@ -62,6 +61,11 @@ export async function proposeMultisigMessages(
 
     const actions = args.map(argToTransferRequest)
     const packedActions = actions.length > 255 ? packLarge(actions, multisigAddress) : packOrder(actions)
+    let value = toNano(.01 * actions.length)
+    const minValue = toNano(.05)
+    if (value < minValue) {
+        value = minValue
+    }
     await sender.send({
         to: multisigAddress,
         body: beginCell()

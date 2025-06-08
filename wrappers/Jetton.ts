@@ -160,11 +160,18 @@ export class JettonWallet implements Contract {
     }
 
     async sendCreatePoolJettonFromParams(provider: ContractProvider, via: Sender, value: bigint, vault: Address, amount: bigint, params: PoolParams, creation_params: PoolCreationParams) {
+        await this.sendTransferWithPayload(provider, via, value, vault, amount, this.buildCreatePoolJettonFromParams(params, creation_params));
+    }
+
+    buildCreatePoolJettonFromParams(
+        params: PoolParams,
+        creation_params: PoolCreationParams
+    ): Cell {
         const b = beginCell()
             .storeUint(0xc0ffee11, 32)
         params.write(b)
         creation_params.write(b)
-        await this.sendTransferWithPayload(provider, via, value, vault, amount, b.endCell());
+        return b.endCell()
     }
 
     async sendDepositLiquidityJetton(provider: ContractProvider, via: Sender, value: bigint, vault: Address, amount: bigint, params: DepositLiquidityParams) {

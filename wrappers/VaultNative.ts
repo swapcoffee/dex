@@ -55,13 +55,21 @@ export class VaultNative implements Contract {
     }
 
     async sendCreatePoolNativeFromParams(provider: ContractProvider, via: Sender, value: bigint, amount: bigint, params: PoolParams, creation_params: PoolCreationParams) {
+        await this.sendMessage(provider, via, value, this.buildCreatePoolNativeFromParams(amount, params, creation_params))
+    }
+
+    buildCreatePoolNativeFromParams(
+        amount: bigint,
+        params: PoolParams,
+        creation_params: PoolCreationParams
+    ): Cell {
         const b = beginCell()
             .storeUint(0xc0ffee02, 32)
             .storeUint(0, 64)
             .storeCoins(amount)
         params.write(b)
         creation_params.write(b)
-        await this.sendMessage(provider, via, value, b.endCell())
+        return b.endCell()
     }
 
     async sendDepositLiquidityNative(provider: ContractProvider, via: Sender, value: bigint, input_amount: bigint, params: DepositLiquidityParams) {
