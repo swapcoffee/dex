@@ -22,30 +22,19 @@ int get_direction_from_proof(slice cs, slice previous_asset_hint) inline {
         ;; therefore we came from one of the previous pool assets,
         ;; at least one of assets must be the same
         ;; => after performing the swap, we'll get another one
-        if (equal_slice_bits(asset1, storage::asset1)) {
-            if (equal_slice_bits(asset2, storage::asset2)) {
-                if (equal_slice_bits(previous_asset_hint, storage::asset1)) {
-                    return direction::forward;
-                } elseif (equal_slice_bits(previous_asset_hint, storage::asset2)) {
-                    return direction::backward;
-                } else {
-                    throw(errors::wrong_assets);
-                }
-            } else {
-                return direction::forward;
-            }
-        } elseif (equal_slice_bits(asset1, storage::asset2)) {
-            if (equal_slice_bits(asset2, storage::asset1)) {
-                ;; assets must be sorted in the same way on both pools
-                throw(errors::wrong_assets);
-            } else {
-                return direction::backward;
-            }
-        } elseif (equal_slice_bits(asset2, storage::asset1)) {
-            ;; this condition (and similarly for the next one) shall be enough, because
-            ;; there's no cycle due to proof validation
+
+        int a11 = equal_slice_bits(asset1, storage::asset1);
+        int a12 = equal_slice_bits(asset1, storage::asset2);
+        int a21 = equal_slice_bits(asset2, storage::asset1);
+        int a22 = equal_slice_bits(asset2, storage::asset2);
+
+        int is_incorrect = a12 & a21;
+        int is_one_token_same = a11 | a12 | a21 | a22;
+
+        throw_if(errors::wrong_assets, is_incorrect | ~ is_one_token_same);
+        if (equal_slice_bits(previous_asset_hint, storage::asset1)) {
             return direction::forward;
-        } elseif (equal_slice_bits(asset2, storage::asset2)) {
+        } elseif (equal_slice_bits(previous_asset_hint, storage::asset2)) {
             return direction::backward;
         } else {
             throw(errors::wrong_assets);
