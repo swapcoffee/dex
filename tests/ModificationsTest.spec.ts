@@ -520,8 +520,8 @@ describe('Test', () => {
         })
         await nativeVault.sendSwapNative(
             user.getSender(),
-            toNano(1.2),
-            toNano(1),
+            toNano(2.2),
+            toNano(2),
             new SwapStepParams(
                 await factory.getPoolAddressHash(
                     AssetNative.INSTANCE,
