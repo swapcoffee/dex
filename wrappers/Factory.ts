@@ -256,7 +256,7 @@ export class Factory implements Contract {
 
     async getAdminAddress(provider: ContractProvider) {
         let res = await provider.get('get_admin_address', []);
-        return res.stack.readAddress();
+        return res.stack.readAddressOpt();
     }
 
     async getCode(provider: ContractProvider) {

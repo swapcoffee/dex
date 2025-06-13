@@ -29,6 +29,8 @@ enum COMMANDS {
     UPDATE_WITHDRAWER
 }
 
+const CONTRACTS: string = ''
+
 export async function run(provider: NetworkProvider) {
     const sender = provider.sender()
     if (!sender.address) {
@@ -40,7 +42,7 @@ export async function run(provider: NetworkProvider) {
         Address.parse('EQAsf2sDPfoo-0IjnRA7l_gJBB9jyo4zqfCG_1IFCCI_Qbef')
     )
     const factory = provider.open(Factory.createFromAddress(factoryAddress))
-    const factoryAdminAddress = await factory.getAdminAddress()
+    const factoryAdminAddress = (await factory.getAdminAddress())!
     if (factoryAdminAddress.toRawString() !== sender.address.toRawString()) {
         try {
             await provider.provider(factoryAdminAddress).get('get_multisig_data', [])
@@ -223,81 +225,93 @@ export async function run(provider: NetworkProvider) {
             }
         }
         if (command == COMMANDS.UPDATE_CONTRACT) {
-            const targetAddress = await ui.inputAddress('Enter target address')
             const compiled = await getCompiledCodes()
-            if (targetAddress.toRawString() === factoryAddress.toRawString()) {
-                actions.push({
-                    to: factoryAddress,
-                    value: toNano(.05),
-                    body: factory.buildUpdateContract(null, compiled.factory, null)
-                })
-            } else {
-                const state = await provider.provider(targetAddress).getState()
-                if (state.state.type !== 'active') {
-                    throw new Error('Wrong state for given address: ' + state.state.type)
-                }
-                const dataCell = Cell.fromBoc(state.state.data as Buffer)[0]
-                const cs = dataCell.beginParse()
-                cs.loadRef()
-                const initDataS = cs.loadRef().beginParse()
-                const currentFactoryAddress = initDataS.loadAddress()
-                if (currentFactoryAddress.toRawString() !== factoryAddress.toRawString()) {
-                    throw new Error('Target is of another factory: ' + currentFactoryAddress.toRawString())
-                }
-                let contractName, codeCell
-                const contractType = initDataS.loadUint(2)
-                if (contractType == 0) {
-                    const vaultType = initDataS.loadUint(2)
-                    if (vaultType == 0) {
-                        contractName = 'Native vault'
-                        codeCell = compiled.vaultNative
-                    } else if (vaultType == 1) {
-                        contractName = 'Jetton vault'
-                        codeCell = compiled.vaultJetton
-                    } else if (vaultType == 2) {
-                        contractName = 'Extra vault'
-                        codeCell = compiled.vaultExtra
-                    } else {
-                        throw new Error('Unknown vault type: ' + vaultType)
-                    }
+            async function update(targetAddress: Address) {
+                if (targetAddress.toRawString() === factoryAddress.toRawString()) {
                     actions.push({
                         to: factoryAddress,
                         value: toNano(.05),
-                        body: factory.buildUpdateContract(targetAddress, codeCell, null)
-                    })
-                } else if (contractType == 1) {
-                    Asset.fromSlice(initDataS)
-                    Asset.fromSlice(initDataS)
-                    const amm = initDataS.loadUint(3)
-                    if (amm == 0) {
-                        contractName = 'ConstantProduct pool'
-                        codeCell = compiled.poolConstantProduct
-                    } else if (amm == 1) {
-                        contractName = 'CurveFiStable pool'
-                        codeCell = compiled.poolCurveFiStable
-                    } else {
-                        throw new Error('Unknown amm: ' + amm)
-                    }
-                    actions.push({
-                        to: factoryAddress,
-                        value: toNano(.05),
-                        body: factory.buildUpdateContract(targetAddress, codeCell, null)
+                        body: factory.buildUpdateContract(null, compiled.factory, null)
                     })
                 } else {
-                    throw new Error('Unsupported contract type: ' + contractType)
+                    const state = await provider.provider(targetAddress).getState()
+                    if (state.state.type !== 'active') {
+                        throw new Error('Wrong state for given address: ' + state.state.type)
+                    }
+                    const dataCell = Cell.fromBoc(state.state.data as Buffer)[0]
+                    const cs = dataCell.beginParse()
+                    cs.loadRef()
+                    const initDataS = cs.loadRef().beginParse()
+                    const currentFactoryAddress = initDataS.loadAddress()
+                    if (currentFactoryAddress.toRawString() !== factoryAddress.toRawString()) {
+                        throw new Error('Target is of another factory: ' + currentFactoryAddress.toRawString())
+                    }
+                    let contractName, codeCell
+                    const contractType = initDataS.loadUint(2)
+                    if (contractType == 0) {
+                        const vaultType = initDataS.loadUint(2)
+                        if (vaultType == 0) {
+                            contractName = 'Native vault'
+                            codeCell = compiled.vaultNative
+                        } else if (vaultType == 1) {
+                            contractName = 'Jetton vault'
+                            codeCell = compiled.vaultJetton
+                        } else if (vaultType == 2) {
+                            contractName = 'Extra vault'
+                            codeCell = compiled.vaultExtra
+                        } else {
+                            throw new Error('Unknown vault type: ' + vaultType)
+                        }
+                        actions.push({
+                            to: factoryAddress,
+                            value: toNano(.05),
+                            body: factory.buildUpdateContract(targetAddress, codeCell, null)
+                        })
+                    } else if (contractType == 1) {
+                        Asset.fromSlice(initDataS)
+                        Asset.fromSlice(initDataS)
+                        const amm = initDataS.loadUint(3)
+                        if (amm == 0) {
+                            contractName = 'ConstantProduct pool'
+                            codeCell = compiled.poolConstantProduct
+                        } else if (amm == 1) {
+                            contractName = 'CurveFiStable pool'
+                            codeCell = compiled.poolCurveFiStable
+                        } else {
+                            throw new Error('Unknown amm: ' + amm)
+                        }
+                        actions.push({
+                            to: factoryAddress,
+                            value: toNano(.05),
+                            body: factory.buildUpdateContract(targetAddress, codeCell, null)
+                        })
+                    } else {
+                        throw new Error('Unsupported contract type: ' + contractType)
+                    }
+                    console.log(
+                        contractName,
+                        'code cell will be changed from',
+                        Cell.fromBoc(state.state.code as Buffer)[0].hash().toString('hex'),
+                        'to',
+                        codeCell.hash().toString('hex')
+                    )
                 }
-                console.log(
-                    contractName,
-                    'code cell will be changed from',
-                    Cell.fromBoc(state.state.code as Buffer)[0].hash().toString('hex'),
-                    'to',
-                    codeCell.hash().toString('hex')
-                )
             }
-            if (parseYesNo(await ui.input('Do you want to update more contracts ("y" / "n")?'))) {
-                continue
-            } else {
+            if (CONTRACTS !== '') {
+                const lines = CONTRACTS.split("\n")
+                for (const line of lines) {
+                    const targetAddress = Address.parse(line.trim())
+                    await update(targetAddress)
+                }
                 break
+            } else {
+                const targetAddress = await ui.inputAddress('Enter target address')
+                await update(targetAddress)
+                if (parseYesNo(await ui.input('Do you want to update more contracts ("y" / "n")?'))) {
+                    continue
+                } else {
+                    break
+                }
             }
         }
         if (command == COMMANDS.UPDATE_CODE_CELLS) {
