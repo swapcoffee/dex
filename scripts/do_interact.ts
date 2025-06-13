@@ -42,7 +42,7 @@ export async function run(provider: NetworkProvider) {
         Address.parse('EQAsf2sDPfoo-0IjnRA7l_gJBB9jyo4zqfCG_1IFCCI_Qbef')
     )
     const factory = provider.open(Factory.createFromAddress(factoryAddress))
-    const factoryAdminAddress = await factory.getAdminAddress()
+    const factoryAdminAddress = (await factory.getAdminAddress())!
     if (factoryAdminAddress.toRawString() !== sender.address.toRawString()) {
         try {
             await provider.provider(factoryAdminAddress).get('get_multisig_data', [])

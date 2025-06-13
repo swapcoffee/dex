@@ -126,7 +126,6 @@ int get_direction_from_proof(slice cs, slice previous_asset_hint) inline {
         send_hash_builder(vault2_hash, 0, body, SEND_MODE_SELF_DESTROY);
     } else {
         reserve_for_carry_inbound_without_value();
-        builder body = build_payout_internal_body(query_id, recipient, amount2, notification_data_single, storage::init_data_cell);
         send_hash_builder(vault2_hash, 0, body, SEND_MODE_CARRY_ALL_BALANCE);
     }
 }
